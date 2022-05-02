@@ -13,11 +13,15 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 document.body.style.margin = 0;
 document.body.style.padding = 0;
 
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
+
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= debug gui =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gui = new dat.GUI();
 
 const debugVars = {
-    fov: 70,
+    fov: 10,
 }
 
 gui.add(debugVars, "fov", 10, 150);
@@ -26,18 +30,34 @@ gui.add(debugVars, "fov", 10, 150);
 const camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 10 );
 camera.position.z = 1;
 
-// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene + mesh =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2c2d70);
-const gltfLoader = new GLTFLoader();
+
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Light =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
+
+const light = new THREE.DirectionalLight("#ffffff", 0.2);
+const pointLight = new THREE.PointLight("#ffffff", 0.2);
+const pointLightBack = new THREE.PointLight("#ffffff", 0.2);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+light.position.set( 0, -70, 100 ).normalize();
+pointLight.position.set(0,-40,300);
+pointLightBack.position.set(0,-40,-100);
+
+scene.add(light);
+scene.add(pointLight);
+scene.add(pointLightBack);
+scene.add(ambientLight);
+
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 let airplaneObject = null;
+let airplaneTexture = 
 gltfLoader.load("/models/paper_airplane/scene.gltf", (gltf) => {
-    console.log(gltf);
+    //console.log(gltf);
     //gltf.scene.scale.set(0.05, 0.05, 0.05);
-    gltf.scene.position.set(1, 0, 0);
+    //gltf.scene.position.set(1, 0, 0);
 
     // Apply Material to every Mesh imported from model
     /*gltf.scene.traverse((child) => {
@@ -46,8 +66,14 @@ gltfLoader.load("/models/paper_airplane/scene.gltf", (gltf) => {
         }
     });
     */
-    airplaneObject = gltf.scene;
-    scene.add(gltf.scene);
+    airplaneObject = gltf.scene.children[0];
+    // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
+    airplaneObject.material = new THREE.MeshStandardMaterial({
+        map: textureLoader.load("models/paper_airplane/textures/papier_baseColor.jpeg"),
+        //emissive: 0xffffff,
+        //color: 0xcccccc,
+    });
+    scene.add(airplaneObject);
 });
 
 
@@ -103,4 +129,5 @@ const tick = () => {
     window.requestAnimationFrame(tick);
 };
 
+// TODO: only start ticking after everything has loaded, show loading bar before that
 tick();
