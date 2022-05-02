@@ -1,0 +1,24 @@
+{
+  "name": "homepage",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "ian.r.band@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "lil-gui": "^0.16.1",
+    "three": "^0.140.0"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^10.2.4",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.5.0",
+    "webpack": "^5.72.0",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.8.1"
+  },
+  "scripts": {
+    "build": "webpack",
+    "serve": "webpack serve --hot",
+    "start": "webpack serve --hot"
+  }
+}
