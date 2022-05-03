@@ -86,7 +86,8 @@ scene.add(tileMesh);
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-let airplaneMesh = null;
+let airplaneParent = null;
+let airplaneLoaded = false;
 gltfLoader.load("/models/paper_airplane/scene.gltf", (gltf) => {
     //console.log(gltf);
     //gltf.scene.scale.set(0.05, 0.05, 0.05);
@@ -99,18 +100,24 @@ gltfLoader.load("/models/paper_airplane/scene.gltf", (gltf) => {
         }
     });
     */
-    airplaneMesh = gltf.scene.children[0];
+    let airplaneMesh = gltf.scene.children[0];
 
+    // NEED THESE TO CENTER THE AIRPLANE MESH
     airplaneMesh.translateX(0.8);
     airplaneMesh.translateY(0.1);
-    airplaneMesh.translateZ(0.3);
+    airplaneMesh.translateZ(0);
+
     // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
     airplaneMesh.material = new THREE.MeshStandardMaterial({
         map: textureLoader.load("models/paper_airplane/textures/papier_baseColor.jpeg"),
         //emissive: 0xffffff,
-        //color: 0xcccccc,
+        color: 0xcccccc,
     });
-    scene.add(airplaneMesh);
+
+    airplaneParent = new THREE.Group();
+    airplaneParent.add(airplaneMesh);
+    scene.add(airplaneParent);
+    airplaneLoaded = true;
 });
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= post processing =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -132,11 +139,11 @@ const tick = () => {
     // update mesh & scene
 
 
-    if(airplaneMesh){ //REPLACE ME WITH AN "ALL LOADED" flag
+    if(airplaneLoaded){ //REPLACE ME WITH AN "ALL LOADED" flag
         // rotation around x axis works fine, But, I should fix the airplane centering problem by parenting it to another object.
-        airplaneMesh.rotation.x = Math.PI * -0.5 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
-        //airplaneMesh.translateY(0.02);
-        //airplaneMesh.rotation.y += deltaTime / 3;
+        airplaneParent.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
+        airplaneParent.position.y = 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
+        //airplaneParent.rotation.y += deltaTime / 3;
     }
 
 
