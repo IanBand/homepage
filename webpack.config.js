@@ -23,7 +23,7 @@ module.exports = {
   entry: '/src/index.js',
   plugins: [new HtmlWebpackPlugin(), new CopyWebpackPlugin({
     patterns: [
-      { from: 'assets' }
+      { from: 'assets', globOptions: {ignore: ['**/*.DS_Store', '**/*.gitkeep']} }
     ]})
   ],
   devServer: {
