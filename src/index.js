@@ -77,10 +77,15 @@ scene.add(light);
 scene.add(ambientLight);
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= floor tile =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
-const tileGeometry = new THREE.PlaneGeometry( 1, 1 );
-const tileMaterial = new THREE.MeshStandardMaterial({color: 0x13293d, map: null, side: THREE.DoubleSide});
+const tileGeometry = new THREE.PlaneGeometry( 1, 1);
+const tileMaterial = new THREE.MeshStandardMaterial({
+    color: 0x13293d, 
+    emissive: 0x111111,
+    map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
+    side: THREE.DoubleSide
+});
 const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
-tileMesh.rotateX(Math.PI /2);
+tileMesh.rotateX(Math.PI * 0.5);
 scene.add(tileMesh);
 
 
