@@ -77,16 +77,28 @@ scene.add(light);
 scene.add(ambientLight);
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= floor tile =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
-const tileGeometry = new THREE.PlaneGeometry( 1, 1);
+const tileSize = 1.0;
+const SqrtOfNumberOfTiles = 5;
+const tileGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
 const tileMaterial = new THREE.MeshStandardMaterial({
     color: 0x13293d, 
     emissive: 0x111111,
     map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
     side: THREE.DoubleSide
 });
-const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
-tileMesh.rotateX(Math.PI * 0.5);
-scene.add(tileMesh);
+
+const tileGroup = new THREE.Group();
+for(let i = 0; i < SqrtOfNumberOfTiles; ++i){
+    for(let j = 0; j < SqrtOfNumberOfTiles; ++j){
+        let tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
+        tileMesh.rotateX(Math.PI * 0.5);
+        tileMesh.position.x = i * tileSize;
+        tileMesh.position.z = j * tileSize;
+        tileGroup.add(tileMesh);
+    }
+}
+
+scene.add(tileGroup);
 
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
