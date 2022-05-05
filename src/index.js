@@ -5,6 +5,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Vector3 } from 'three';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -28,14 +29,11 @@ let numberOfMeshesLoaded = 0, initFinished = false;
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gameState = {
-    curChunk: null,
-    prevChunk: null,
-    curPositionInChunk: null,
-    prevPositionInChunk: null,
-    curVelocity: null,
-    prevVelocity: null,
-    curAcceleration: null,
-    prevAcceleration: null,
+    chunkCoordinate: null,
+    prevChunkCoordinate: null,
+    positionInChunk: null,
+    velocity: null,
+    acceleration: null,
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 3.0;
@@ -78,6 +76,7 @@ function init(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 10 );
     camera.position.z = 1;
+    camera.position.y = 2;
 
     controls = new OrbitControls( camera , renderer.domElement);
 
@@ -103,14 +102,11 @@ function init(){
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= gameState =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     // integer position is used for corse grain colission detection & to avoid fp inaccuracies
-    gameState.curChunk =  new THREE.Vector2(0,0);
-    gameState.prevChunk = new THREE.Vector2(0,0);
-    gameState.curPositionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
-    gameState.prevPositionInChunk = new THREE.Vector3(0.5, 0.5, 0.5);
-    gameState.curVelocity =  new THREE.Vector3(0.0,0.0,0.0);
-    gameState.prevVelocity = new THREE.Vector3(0.0,0.0,0.0);
-    gameState.curAcceleration =  new THREE.Vector3(0.0,0.0,0.0);
-    gameState.prevAcceleration = new THREE.Vector3(0.0,0.0,0.0);
+    gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
+    gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
+    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
+    gameState.velocity =  new THREE.Vector3(-0.5,0.0,-0.5);
+    gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
     directionalLight = new THREE.DirectionalLight(0xffaa11, 0.8);
@@ -189,7 +185,7 @@ function createChunkMesh(x, z, seed){
         emissive: 0x111111,
         map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
         side: THREE.DoubleSide,
-        wireframe: false,
+        wireframe: true,
     });
     const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
     tileMesh.position.x = x * chunkSize;
@@ -215,27 +211,54 @@ function createChunkMesh(x, z, seed){
 
 
 
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Logic =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
+function updateGameState(dt){
 
+    const zero = new THREE.Vector3();
 
+    // apply acceleration
+    gameState.velocity.addScaledVector(gameState.acceleration, dt);
+    // apply drag
+    gameState.velocity.addScaledVector(gameState.velocity, -0.01/* DRAG COEFFICENT */ );
+    
+    //console.log(gameState.velocity);
+    // apply minimum speed 
+    if(gameState.velocity.distanceToSquared(zero) < 0.001 && gameState.acceleration.distanceToSquared(zero) == 0.0){
+        gameState.velocity = zero;
+    }
 
+    // apply speed to position
+    gameState.positionInChunk.addScaledVector(gameState.velocity, dt);
 
+    const xBoundaryCrossed = gameState.positionInChunk.x >= 1.0 || gameState.positionInChunk.x <  0.0;
+    const zBoundaryCrossed = gameState.positionInChunk.z >= 1.0 || gameState.positionInChunk.z <  0.0;
+
+    // check if we have crossed a chunk boundary
+    if( zBoundaryCrossed || xBoundaryCrossed ){
+        //console.log('xz boundary crossed')
+        
+        // update chunk coordinates
+        gameState.chunkCoordinate.add(gameState.positionInChunk.clone().floor());
+        gameState.chunkCoordinate.y = 0.0; // disregard y chunk coordinate value. this lets us simply add the chunkCoordinate and positionInChunk vectors to get the world space vector
+    
+        updateLoadedChunks();
+    }
+    // if needed, calc new positions within chunk
+    if(zBoundaryCrossed){
+        // if greater than one, subtract one. if less than 1, add 1
+        gameState.positionInChunk.z -= Math.sign(gameState.positionInChunk.z);
+    }
+    if(xBoundaryCrossed){
+        gameState.positionInChunk.x -= Math.sign(gameState.positionInChunk.x);
+    }
+    
+}
 
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function loadAirplaneModel(){
     gltfLoader.load("/models/paper_airplane/scene.gltf", (gltf) => {
-        //console.log(gltf);
-        //gltf.scene.scale.set(0.05, 0.05, 0.05);
-        //gltf.scene.position.set(1, 0, 0);
-
-        // Apply Material to every Mesh imported from model
-        /*gltf.scene.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                child.material = shinyMaterial;
-            }
-        });
-        */
         let airplaneMesh = gltf.scene.children[0];
 
         // NEED THESE TO CENTER THE AIRPLANE MESH
@@ -261,14 +284,34 @@ function loadAirplaneModel(){
 
 
 function tick(){
+
+    // request another frame
+    window.requestAnimationFrame(tick);
+
     // timekeeping
     const elapsedTime = clock.getElapsedTime();
     const deltaTime = elapsedTime - previousTime;
     previousTime = elapsedTime;
 
-    // game logic
-    airplaneParent.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
-    airplaneParent.position.y = 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
+
+    updateGameState(deltaTime);
+
+
+    // apply updated game state to scene
+    
+    let airplanePosition = gameState.positionInChunk.clone();
+    airplanePosition.add(gameState.chunkCoordinate);
+    airplanePosition.multiplyScalar(chunkSize);
+    airplaneParent.position.set(
+        airplanePosition.x, 
+        airplanePosition.y, 
+        airplanePosition.z
+    );
+    //airplaneParent.position.y += 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
+    //airplaneParent.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
+
+
+
 
 
     camera.setFocalLength(debugVars.fov);
@@ -283,9 +326,6 @@ function tick(){
     // render
     postProcessing.composer.render( 0.1 );
 
-
-    // Call tick again on the next frame
-    window.requestAnimationFrame(tick);
 };
 
 // TODO: only start ticking after everything has loaded, show loading bar before that
