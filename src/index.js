@@ -39,8 +39,8 @@ const gameState = {
     acceleration: null,
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const chunkSize = 3.0;
-const loadedChunksRadius = 3; // MUST BE ODD FOR NOW... TODO: CHANGE TO RADIUS
+const chunkSize = 10.0;
+const loadedChunksRadius = 1;
 const _SEED_ = '1';
 
 const zero = new THREE.Vector3(); // dont change this
@@ -144,8 +144,8 @@ function loadInitalChunks(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Chunks =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
 
     chunkGroup = new THREE.Group();
-    for(let i = -loadedChunksRadius; i < loadedChunksRadius; ++i){
-        for(let j = -loadedChunksRadius; j < loadedChunksRadius; ++j){
+    for(let i = -loadedChunksRadius; i <= loadedChunksRadius; ++i){
+        for(let j = -loadedChunksRadius; j <= loadedChunksRadius; ++j){
             chunkGroup.add(createChunkMesh(i, j, _SEED_));
         }
     }
@@ -154,65 +154,91 @@ function loadInitalChunks(){
     
     scene.add(chunkGroup);
 }
+/** 
+ * Loads new chunks based off of the players previous chunk and the chunk they have crossed into, unloads old chunks
+ * 
+ * **BUG**: chunks load and unload incorrectly when the player crosses into a chunk diagonally
+ * 
+ * **UNTESTED**: Chunks will not load correctly if the player crosses into another chunk that is not adjacent to their previous chunk
+ */
 function updateLoadedChunks(){
 
-    //console.log('=-=-=-=-=-=--==-=-=-=-=--=')
-    //console.log(gameState.prevChunkCoordinate);
-    //console.log(gameState.chunkCoordinate);
-
-    // load new chunks based on position
-
-    
-    getNewChunkCoordinates(
+    // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
+    getForwardChunkCoordinates(
         gameState.chunkCoordinate.x, 
         gameState.chunkCoordinate.z, 
-        gameState.prevChunkCoordinate, 
-        gameState.prevChunkCoordinate, 
-        loadedChunksRadius
-    );
-        // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
-        // each chunk will have its name be based off its x and y coordinate "x_y"
+        gameState.prevChunkCoordinate.x, 
+        gameState.prevChunkCoordinate.z
+    )
+    .map(({x,z}) => chunkGroup.add(createChunkMesh(x,z)));
+        
+        
 
     // unload old chunks based on position
+    getForwardChunkCoordinates(
+        gameState.prevChunkCoordinate.x, 
+        gameState.prevChunkCoordinate.z,
+        gameState.chunkCoordinate.x, 
+        gameState.chunkCoordinate.z
+    )
+    .map(({x,z}) => chunkGroup.remove(chunkGroup.getObjectByName(chunkName(x,z))));
+
         // unload old chunks based off new integer position & old integer position
         // use .getObjectByName
         // and object.parent.remove( object );
         // https://stackoverflow.com/questions/56716008/removing-object-from-group-removes-object-from-scene
 }
-function chunkName(a,b){
-    return `CH_${a}_${b}`;
+function chunkName(x,z){
+    return `CH_${x}_${z}`;
 }
-function getNewChunkCoordinates(newX, newZ, oldX, oldZ, _loadedChunksRadius){
-
-    const loadedChunksRadius = (_loadedChunksRadius - 1) / 2;
+/**
+ * 
+ * @param {Number} newX 
+ * @param {Number} newZ 
+ * @param {Number} oldX 
+ * @param {Number} oldZ 
+ * @returns {[{x,z}]} A list of chunk coordinates to load 
+ */
+function getForwardChunkCoordinates(newX, newZ, oldX, oldZ){
+    
     const coordList = [];
 
-    let dX = newX = oldX;
-    let dz = newZ - oldZ;
-    // (dX, dZ) is our chunk change direction vector
+    // this will probably break if someone travels more than one chunk at a time
+    let dx = Math.sign(newX - oldX);
+    let dz = Math.sign(newZ - oldZ);
 
-    if(newX === oldX + 1){
+    // this could use a refactor
+    if(newX !== oldX && newZ !== oldZ){
+        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
+            coordList.push({x: newX + dx * loadedChunksRadius, z: newZ + i});
 
-        for(let i = loadedChunksRadius * -1; i < loadedChunksRadius; i++){
-            coordList.push({x: newX + loadedChunksRadius, z: newZ + i});
-        }
-        
-    }
-
-    for(let i = loadedChunksRadius * -1; i < loadedChunksRadius; i++){
-        for(let j = loadedChunksRadius * -1; j < loadedChunksRadius; j++){
-            
+            if(i < loadedChunksRadius){
+                coordList.push({x: newX + i, z: newZ + dz * loadedChunksRadius});
+            }
         }
     }
-
+    else if(newX !== oldX){
+        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
+            coordList.push({x: newX + dx * loadedChunksRadius, z: newZ + i});
+        }
+    }
+    else if(newZ !== oldZ){
+        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
+            coordList.push({x: newX + i, z: newZ + dz * loadedChunksRadius});
+        }
+    }
+    else{
+        console.error('getForwardChunkCoordinates() was called with the same coordinates');
+        throw{};
+    }
     //console.log(coordList);
     return coordList;
 }
-function getOldChunkCoordinates(newX, newZ, oldX, oldZ, _loadedChunksRadius){
+function getOldChunkCoordinates(newX, newZ, oldX, oldZ){
     return [];
 }
 
-function createChunkMesh(x, z, seed){
+function createChunkMesh(x, z){
     const chunkMesh = new THREE.Group();
     chunkMesh.name = chunkName(x,z);
 
