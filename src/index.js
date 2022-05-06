@@ -5,7 +5,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Vector3 } from 'three';
+import KeyboardState from './KeyboardState.js';
+
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -23,6 +24,8 @@ let renderer, scene, camera, controls,
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 
+const keyboard = new KeyboardState();
+
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Keep track of loading =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const numberOfMeshesToLoad = 1;
 let numberOfMeshesLoaded = 0, initFinished = false;
@@ -37,14 +40,16 @@ const gameState = {
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 3.0;
-const sqrtOfNumberOfLoadedChunks = 5;
+const loadedChunksRadius = 3; // MUST BE ODD FOR NOW... TODO: CHANGE TO RADIUS
 const _SEED_ = '1';
+
+const zero = new THREE.Vector3(); // dont change this
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= debug gui =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gui = new dat.GUI();
 
 const debugVars = {
-    fov: 10,
+    fov: 15,
     px: 0,
     py: 0,
     pz: 0,
@@ -74,9 +79,8 @@ function init(){
     scene.background = new THREE.Color(0x2c2d70);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 10 );
-    camera.position.z = 1;
-    camera.position.y = 2;
+    camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 100 );
+    camera.position.y = 25.0;
 
     controls = new OrbitControls( camera , renderer.domElement);
 
@@ -84,10 +88,10 @@ function init(){
     controls.zoomSpeed = 0.9;
 
     controls.minDistance = 0.01;
-    controls.maxDistance = 5;
+    controls.maxDistance = 50;
 
     controls.minPolarAngle = 0; // radians
-    controls.maxPolarAngle = Math.PI /2; // radians
+    controls.maxPolarAngle = Math.PI * 0.5; // radians
 
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
@@ -96,7 +100,6 @@ function init(){
     postProcessing = {};
     renderPass = new RenderPass( scene, camera );
     postProcessing.composer = new EffectComposer( renderer );
-
     postProcessing.composer.addPass( renderPass );
 
 
@@ -105,7 +108,7 @@ function init(){
     gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
     gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
     gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
-    gameState.velocity =  new THREE.Vector3(-0.5,0.0,-0.5);
+    gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
@@ -141,18 +144,32 @@ function loadInitalChunks(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Chunks =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
 
     chunkGroup = new THREE.Group();
-    for(let i = 0; i < sqrtOfNumberOfLoadedChunks; ++i){
-        for(let j = 0; j < sqrtOfNumberOfLoadedChunks; ++j){
+    for(let i = -loadedChunksRadius; i < loadedChunksRadius; ++i){
+        for(let j = -loadedChunksRadius; j < loadedChunksRadius; ++j){
             chunkGroup.add(createChunkMesh(i, j, _SEED_));
         }
     }
-    chunkGroup.translateX((sqrtOfNumberOfLoadedChunks - 1) * chunkSize * -0.5);
-    chunkGroup.translateZ((sqrtOfNumberOfLoadedChunks - 1) * chunkSize * -0.5);
+    chunkGroup.translateX(0.5 * chunkSize);
+    chunkGroup.translateZ(0.5 * chunkSize);
     
     scene.add(chunkGroup);
 }
 function updateLoadedChunks(){
+
+    //console.log('=-=-=-=-=-=--==-=-=-=-=--=')
+    //console.log(gameState.prevChunkCoordinate);
+    //console.log(gameState.chunkCoordinate);
+
     // load new chunks based on position
+
+    
+    getNewChunkCoordinates(
+        gameState.chunkCoordinate.x, 
+        gameState.chunkCoordinate.z, 
+        gameState.prevChunkCoordinate, 
+        gameState.prevChunkCoordinate, 
+        loadedChunksRadius
+    );
         // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
         // each chunk will have its name be based off its x and y coordinate "x_y"
 
@@ -165,10 +182,33 @@ function updateLoadedChunks(){
 function chunkName(a,b){
     return `CH_${a}_${b}`;
 }
-function getNewChunkCoordinates(newX, newY, oldX, oldY, _sqrtOfNumberOfLoadedChunks){
-    return [];
+function getNewChunkCoordinates(newX, newZ, oldX, oldZ, _loadedChunksRadius){
+
+    const loadedChunksRadius = (_loadedChunksRadius - 1) / 2;
+    const coordList = [];
+
+    let dX = newX = oldX;
+    let dz = newZ - oldZ;
+    // (dX, dZ) is our chunk change direction vector
+
+    if(newX === oldX + 1){
+
+        for(let i = loadedChunksRadius * -1; i < loadedChunksRadius; i++){
+            coordList.push({x: newX + loadedChunksRadius, z: newZ + i});
+        }
+        
+    }
+
+    for(let i = loadedChunksRadius * -1; i < loadedChunksRadius; i++){
+        for(let j = loadedChunksRadius * -1; j < loadedChunksRadius; j++){
+            
+        }
+    }
+
+    //console.log(coordList);
+    return coordList;
 }
-function getOldChunkCoordinates(newX, newY, oldX, oldY, _sqrtOfNumberOfLoadedChunks){
+function getOldChunkCoordinates(newX, newZ, oldX, oldZ, _loadedChunksRadius){
     return [];
 }
 
@@ -182,7 +222,7 @@ function createChunkMesh(x, z, seed){
     const tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
     const tileMaterial = new THREE.MeshStandardMaterial({
         color: 0x13293d, 
-        emissive: 0x111111,
+        emissive: 0x000000,
         map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
         side: THREE.DoubleSide,
         wireframe: true,
@@ -215,17 +255,19 @@ function createChunkMesh(x, z, seed){
 
 function updateGameState(dt){
 
-    const zero = new THREE.Vector3();
+    
 
     // apply acceleration
     gameState.velocity.addScaledVector(gameState.acceleration, dt);
+
     // apply drag
     gameState.velocity.addScaledVector(gameState.velocity, -0.01/* DRAG COEFFICENT */ );
     
     //console.log(gameState.velocity);
     // apply minimum speed 
-    if(gameState.velocity.distanceToSquared(zero) < 0.001 && gameState.acceleration.distanceToSquared(zero) == 0.0){
-        gameState.velocity = zero;
+    if(gameState.velocity.distanceToSquared(zero) < 0.001 && gameState.acceleration.distanceToSquared(zero) < 0.001){
+        gameState.velocity.set(0.0,0.0,0.0);
+
     }
 
     // apply speed to position
@@ -238,6 +280,9 @@ function updateGameState(dt){
     if( zBoundaryCrossed || xBoundaryCrossed ){
         //console.log('xz boundary crossed')
         
+        // save prev coordinates
+        gameState.prevChunkCoordinate = gameState.chunkCoordinate.clone();
+
         // update chunk coordinates
         gameState.chunkCoordinate.add(gameState.positionInChunk.clone().floor());
         gameState.chunkCoordinate.y = 0.0; // disregard y chunk coordinate value. this lets us simply add the chunkCoordinate and positionInChunk vectors to get the world space vector
@@ -293,6 +338,26 @@ function tick(){
     const deltaTime = elapsedTime - previousTime;
     previousTime = elapsedTime;
 
+    keyboard.update();
+
+    // translate keyboard inputs into game inputs (skipping this step for now lol)
+
+    // translate game inputs into changes onto game state
+    if(keyboard.pressed("up"))
+        gameState.acceleration.z = -0.5;
+    else if(keyboard.pressed("down"))
+        gameState.acceleration.z = 0.5;
+    else
+        gameState.acceleration.z = 0.0;
+
+    if(keyboard.pressed("left"))
+        gameState.acceleration.x = -0.5;
+    else if(keyboard.pressed("right"))
+        gameState.acceleration.x = 0.5;
+    else
+        gameState.acceleration.x = 0.0;
+
+    
 
     updateGameState(deltaTime);
 
@@ -310,6 +375,13 @@ function tick(){
     //airplaneParent.position.y += 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
     //airplaneParent.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
 
+
+
+    if(gameState.velocity.distanceToSquared(zero) > 0.01){
+        airplaneParent.lookAt(airplaneParent.position.clone().addScaledVector(gameState.velocity, -1));
+    }
+    
+    
 
 
 
