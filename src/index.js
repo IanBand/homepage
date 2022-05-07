@@ -4,9 +4,7 @@ import * as dat from "lil-gui";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import KeyboardState from './KeyboardState.js';
-
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -15,7 +13,7 @@ document.body.style.margin = 0;
 document.body.style.padding = 0;
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-let renderer, scene, camera, controls,
+let renderer, scene, camera,
     postProcessing, renderPass,
     chunkGroup, airplaneParent, ambientLight, directionalLight,
     clock, previousTime;
@@ -24,26 +22,34 @@ let renderer, scene, camera, controls,
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 
+// Reused Loaded Assets 
+let tileGeometry, tileMaterial;
+
 const keyboard = new KeyboardState();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Keep track of loading =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const numberOfMeshesToLoad = 1;
 let numberOfMeshesLoaded = 0, initFinished = false;
 
+
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gameState = {
     chunkCoordinate: null,
     prevChunkCoordinate: null,
     positionInChunk: null,
+    direction: null,
     velocity: null,
     acceleration: null,
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const chunkSize = 10.0;
-const loadedChunksRadius = 1;
+const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
+const loadedChunksRadius = 15;
 const _SEED_ = '1';
 
 const zero = new THREE.Vector3(); // dont change this
+
+
+
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= debug gui =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gui = new dat.GUI();
@@ -75,26 +81,24 @@ function init(){
     document.body.appendChild( renderer.domElement );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    const fogColor = 0x2c2d70;
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x2c2d70);
+    scene.background = new THREE.Color(fogColor);
+    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 100 );
+    camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 4000);
     camera.position.y = 25.0;
 
-    controls = new OrbitControls( camera , renderer.domElement);
-
-    controls.rotateSpeed = 0.3;
-    controls.zoomSpeed = 0.9;
-
-    controls.minDistance = 0.01;
-    controls.maxDistance = 50;
-
-    controls.minPolarAngle = 0; // radians
-    controls.maxPolarAngle = Math.PI * 0.5; // radians
-
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
+    tileMaterial = new THREE.MeshStandardMaterial({
+        color: 0x13293d, 
+        emissive: 0x000000,
+        map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
+        side: THREE.DoubleSide,
+        wireframe: true,
+    });
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= post processing =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     postProcessing = {};
@@ -110,6 +114,7 @@ function init(){
     gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
     gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
+    gameState.direction = new THREE.Vector3(0.0,0.0,1.0);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
     directionalLight = new THREE.DirectionalLight(0xffaa11, 0.8);
@@ -164,18 +169,16 @@ function loadInitalChunks(){
 function updateLoadedChunks(){
 
     // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
-    getForwardChunkCoordinates(
+    getHorizonChunkCoordinates(
         gameState.chunkCoordinate.x, 
         gameState.chunkCoordinate.z, 
         gameState.prevChunkCoordinate.x, 
         gameState.prevChunkCoordinate.z
     )
     .map(({x,z}) => chunkGroup.add(createChunkMesh(x,z)));
-        
-        
 
     // unload old chunks based on position
-    getForwardChunkCoordinates(
+    getHorizonChunkCoordinates(
         gameState.prevChunkCoordinate.x, 
         gameState.prevChunkCoordinate.z,
         gameState.chunkCoordinate.x, 
@@ -199,7 +202,7 @@ function chunkName(x,z){
  * @param {Number} oldZ 
  * @returns {[{x,z}]} A list of chunk coordinates to load 
  */
-function getForwardChunkCoordinates(newX, newZ, oldX, oldZ){
+function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
     
     const coordList = [];
 
@@ -228,14 +231,11 @@ function getForwardChunkCoordinates(newX, newZ, oldX, oldZ){
         }
     }
     else{
-        console.error('getForwardChunkCoordinates() was called with the same coordinates');
+        console.error('getHorizonChunkCoordinates() was called with the same coordinates');
         throw{};
     }
     //console.log(coordList);
     return coordList;
-}
-function getOldChunkCoordinates(newX, newZ, oldX, oldZ){
-    return [];
 }
 
 function createChunkMesh(x, z){
@@ -245,14 +245,6 @@ function createChunkMesh(x, z){
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
     // create floor tile
-    const tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
-    const tileMaterial = new THREE.MeshStandardMaterial({
-        color: 0x13293d, 
-        emissive: 0x000000,
-        map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
-        side: THREE.DoubleSide,
-        wireframe: true,
-    });
     const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
     tileMesh.position.x = x * chunkSize;
     tileMesh.position.z = z * chunkSize;
@@ -280,8 +272,7 @@ function createChunkMesh(x, z){
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Logic =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 function updateGameState(dt){
-
-    
+    const epsilon = 0.001;
 
     // apply acceleration
     gameState.velocity.addScaledVector(gameState.acceleration, dt);
@@ -291,10 +282,16 @@ function updateGameState(dt){
     
     //console.log(gameState.velocity);
     // apply minimum speed 
-    if(gameState.velocity.distanceToSquared(zero) < 0.001 && gameState.acceleration.distanceToSquared(zero) < 0.001){
+    if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
         gameState.velocity.set(0.0,0.0,0.0);
 
     }
+
+    // calculate direction
+    if(gameState.velocity.distanceToSquared(zero) >= epsilon){
+        gameState.direction.copy(gameState.velocity.clone().normalize());
+    }
+    
 
     // apply speed to position
     gameState.positionInChunk.addScaledVector(gameState.velocity, dt);
@@ -398,6 +395,9 @@ function tick(){
         airplanePosition.y, 
         airplanePosition.z
     );
+
+
+    camera.position.y += 20.0 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
     //airplaneParent.position.y += 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
     //airplaneParent.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
 
@@ -413,13 +413,14 @@ function tick(){
 
 
     camera.setFocalLength(debugVars.fov);
-    //pointLight.position.set(debugVars.px,debugVars.py,debugVars.pz);
 
-    // update shader uniforms
+    let relativeCameraOffset = new THREE.Vector3(0.0,0.5,2.0);
+    let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneParent.matrixWorld );
+    
+    camera.position.copy(cameraOffset);
 
+    camera.lookAt(airplaneParent.position);
 
-    // update camera controls
-    controls.update();
 
     // render
     postProcessing.composer.render( 0.1 );
