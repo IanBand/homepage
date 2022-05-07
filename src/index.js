@@ -5,6 +5,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
+import { Vector3 } from 'three';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -15,7 +16,7 @@ document.body.style.padding = 0;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 let renderer, scene, camera,
     postProcessing, renderPass,
-    chunkGroup, airplaneParent, ambientLight, directionalLight,
+    chunkGroup, airplaneParent, ibeamParent, ambientLight, directionalLight,
     clock, previousTime;
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -28,7 +29,7 @@ let tileGeometry, tileMaterial;
 const keyboard = new KeyboardState();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Keep track of loading =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const numberOfMeshesToLoad = 1;
+const numberOfMeshesToLoad = 2;
 let numberOfMeshesLoaded = 0, initFinished = false;
 
 
@@ -73,76 +74,6 @@ gui.add(debugVars, "pz", -4, 4);
 init();
 
 
-function init(){
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Window =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    renderer = new THREE.WebGLRenderer( { antialias: true } );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    document.body.appendChild( renderer.domElement );
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    const fogColor = 0x2c2d70;
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(fogColor);
-    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
-    tileMaterial = new THREE.MeshStandardMaterial({
-        color: 0x13293d, 
-        emissive: 0x000000,
-        map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
-        side: THREE.DoubleSide,
-        wireframe: true,
-    });
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= post processing =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    postProcessing = {};
-    renderPass = new RenderPass( scene, camera );
-    postProcessing.composer = new EffectComposer( renderer );
-    postProcessing.composer.addPass( renderPass );
-
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= gameState =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    // integer position is used for corse grain colission detection & to avoid fp inaccuracies
-    gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
-    gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
-    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
-    gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
-    gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
-    gameState.direction = new THREE.Vector3(0.0,0.0,1.0);
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
-    directionalLight = new THREE.DirectionalLight(0xffaa11, 0.8);
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    directionalLight.position.set( 0, 0, 5 ).normalize();
-    scene.add(directionalLight);
-    scene.add(ambientLight);
-
-
-    loadInitalChunks();
-
-    loadAirplaneModel();
-
-    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Prep Main Loop =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    clock = new THREE.Clock();
-    previousTime = 0;
-
-    initFinished = true;
-    tryStarting();
-};
-function tryStarting(){
-    if(initFinished && numberOfMeshesLoaded == numberOfMeshesToLoad){
-        tick();
-    }
-}
-function meshLoaded(){
-    numberOfMeshesLoaded++;
-    tryStarting();
-}
 
 function loadInitalChunks(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Chunks =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
@@ -200,6 +131,7 @@ function chunkName(x,z){
  * @param {Number} oldX 
  * @param {Number} oldZ 
  * @returns {[{x,z}]} A list of chunk coordinates to load 
+ * this function is dog shit
  */
 function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
     
@@ -250,6 +182,11 @@ function createChunkMesh(x, z){
     tileMesh.rotateX(Math.PI * 0.5);
     chunkMesh.add(tileMesh);
 
+
+    const ibeamInstance = ibeamParent.clone();
+    ibeamInstance.position.x = x * chunkSize;
+    ibeamInstance.position.z = z * chunkSize;
+    chunkMesh.add(ibeamInstance);
     // create i-beam
         // only every 3rd chunk has a support beam
         // if(x and z something something)
@@ -347,8 +284,111 @@ function loadAirplaneModel(){
     });
 }
 
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+function loadIbeamModel(){
+    gltfLoader.load("models/painted_i-beam/scene.gltf", (gltf) => {
+        let ibeamMesh = gltf.scene.children[0];
+        const ibeamScale = 0.02;
+
+        ibeamMesh.scale.x = ibeamScale;
+        ibeamMesh.scale.y = ibeamScale;
+        ibeamMesh.scale.z = ibeamScale;
+
+        // NEED THESE TO CENTER THE AIRPLANE MESH
+        //ibeamMesh.scale.set(new THREE.Vector3(1.0,1.0,1.0));
+        //ibeamMesh.mesh.geometry.scale(0.5);
+        ibeamMesh.rotateX( Math.PI * 0.5);
+        ibeamMesh.translateX(0.0);
+        ibeamMesh.translateY(4.15);
+        ibeamMesh.translateZ(0.0);
+
+        // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
+        ibeamMesh.material = new THREE.MeshStandardMaterial({
+            map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png"),
+            normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
+            metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
+            metalness: 0.75, // value is multiplied by metalnessMap
+            color: 0xeeeeee,
+        });
+
+        ibeamParent = new THREE.Group();
+        ibeamParent.add(ibeamMesh);
+        meshLoaded();
+    });
+}
 
 
+function init(){
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Window =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    renderer = new THREE.WebGLRenderer( { antialias: true } );
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    document.body.appendChild( renderer.domElement );
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    const fogColor = 0x823a2f;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(fogColor);
+    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
+    tileMaterial = new THREE.MeshStandardMaterial({
+        color: 0x574a48, 
+        emissive: 0x000000,
+        map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
+        side: THREE.DoubleSide,
+        wireframe: false,
+    });
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= post processing =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    postProcessing = {};
+    renderPass = new RenderPass( scene, camera );
+    postProcessing.composer = new EffectComposer( renderer );
+    postProcessing.composer.addPass( renderPass );
+
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= gameState =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    // integer position is used for corse grain colission detection & to avoid fp inaccuracies
+    gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
+    gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
+    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
+    gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
+    gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
+    gameState.direction = new THREE.Vector3(0.0,0.0,1.0);
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
+    directionalLight = new THREE.DirectionalLight(0xffaa11, 0.8);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    directionalLight.position.set( 0, 0, 5 ).normalize();
+    scene.add(directionalLight);
+    scene.add(ambientLight);
+
+    loadIbeamModel();
+
+    loadAirplaneModel();
+    
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Prep Main Loop =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    clock = new THREE.Clock();
+    previousTime = 0;
+
+    initFinished = true;
+    tryStarting();
+};
+function tryStarting(){
+    if(initFinished && numberOfMeshesLoaded == numberOfMeshesToLoad){
+        loadInitalChunks();
+        tick();
+    }
+}
+function meshLoaded(){
+    numberOfMeshesLoaded++;
+    tryStarting();
+}
 
 function tick(){
 
@@ -420,5 +460,3 @@ function tick(){
     postProcessing.composer.render( 0.1 );
 
 };
-
-// TODO: only start ticking after everything has loaded, show loading bar before that
