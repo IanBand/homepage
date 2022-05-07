@@ -1,5 +1,8 @@
 ## Untitled Airplane Adventure
 <img src="https://i.imgur.com/ZBKYWiG.gif" width="400" ></img>
+<br/>
+https://i.imgur.com/bWxUefQ.mp4
+
 
 ## What's this?
 This is just meant to be something interesting to put on my domain [ian.band](http://ian.band) as a homepage. Inspired by [bruno-simon.com](https://bruno-simon.com/)

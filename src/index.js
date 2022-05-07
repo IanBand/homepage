@@ -52,7 +52,7 @@ const zero = new THREE.Vector3(); // dont change this
 
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= debug gui =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const gui = new dat.GUI();
+//const gui = new dat.GUI();
 
 const debugVars = {
     fov: 15,
@@ -64,7 +64,7 @@ const debugVars = {
     airz: 0,
 }
 
-gui.add(debugVars, "fov", 10, 150);
+//gui.add(debugVars, "fov", 10, 150);
 /*gui.add(debugVars, "px", -4, 4);
 gui.add(debugVars, "py", -4, 4);
 gui.add(debugVars, "pz", -4, 4);
@@ -87,8 +87,7 @@ function init(){
     scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    camera = new THREE.PerspectiveCamera( debugVars.fov, window.innerWidth / window.innerHeight, 0.01, 4000);
-    camera.position.y = 25.0;
+    camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
@@ -367,16 +366,16 @@ function tick(){
 
     // translate game inputs into changes onto game state
     if(keyboard.pressed("up"))
-        gameState.acceleration.z = -0.5;
+        gameState.acceleration.z = -0.5 // / chunkSize;
     else if(keyboard.pressed("down"))
-        gameState.acceleration.z = 0.5;
+        gameState.acceleration.z = 0.5 // / chunkSize;
     else
         gameState.acceleration.z = 0.0;
 
     if(keyboard.pressed("left"))
-        gameState.acceleration.x = -0.5;
+        gameState.acceleration.x = -0.5 // / chunkSize;
     else if(keyboard.pressed("right"))
-        gameState.acceleration.x = 0.5;
+        gameState.acceleration.x = 0.5 // / chunkSize;
     else
         gameState.acceleration.x = 0.0;
 
@@ -407,12 +406,7 @@ function tick(){
         airplaneParent.lookAt(airplaneParent.position.clone().addScaledVector(gameState.velocity, -1));
     }
     
-    
 
-
-
-
-    camera.setFocalLength(debugVars.fov);
 
     let relativeCameraOffset = new THREE.Vector3(0.0,0.5,2.0);
     let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneParent.matrixWorld );
