@@ -1,7 +1,7 @@
 ## Untitled Airplane Adventure
-<img src="https://i.imgur.com/ZBKYWiG.gif" width="400" ></img>
+<img src="https://github.com/IanBand/homepage/raw/main/demo/chunk%20loading.gif" width="400" ></img>
 <br/>
-https://i.imgur.com/bWxUefQ.mp4
+<img src="https://github.com/IanBand/homepage/raw/main/demo/1st%20person%20and%20fog.gif" width="400" ></img>
 
 
 ## What's this?
