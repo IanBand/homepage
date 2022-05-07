@@ -1,0 +1,11 @@
+Model Information:
+* title:	Painted I-Beam
+* source:	https://sketchfab.com/3d-models/painted-i-beam-aa8cc475c2a24b47b852d0929f252143
+* author:	Isaack - Tacko The 3D Guy (https://sketchfab.com/isaackgamma)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Painted I-Beam" (https://sketchfab.com/3d-models/painted-i-beam-aa8cc475c2a24b47b852d0929f252143) by Isaack - Tacko The 3D Guy (https://sketchfab.com/isaackgamma) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
