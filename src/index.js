@@ -271,11 +271,12 @@ function loadAirplaneModel(){
         airplaneMesh.translateZ(0);
 
         // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-        airplaneMesh.material = new THREE.MeshStandardMaterial({
+        /*airplaneMesh.material = new THREE.MeshStandardMaterial({
             map: textureLoader.load("models/paper_airplane/textures/papier_baseColor.jpeg"),
             //emissive: 0xffffff,
             color: 0xcccccc,
         });
+        */
 
         airplaneParent = new THREE.Group();
         airplaneParent.add(airplaneMesh);
@@ -284,11 +285,48 @@ function loadAirplaneModel(){
     });
 }
 
-// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= airplane model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= I-Beam model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function loadIbeamModel(){
     gltfLoader.load("models/painted_i-beam/scene.gltf", (gltf) => {
         let ibeamMesh = gltf.scene.children[0];
         const ibeamScale = 0.02;
+
+        ibeamMesh.scale.x = ibeamScale;
+        ibeamMesh.scale.y = ibeamScale;
+        ibeamMesh.scale.z = ibeamScale;
+
+        // NEED THESE TO CENTER THE AIRPLANE MESH
+        //ibeamMesh.scale.set(new THREE.Vector3(1.0,1.0,1.0));
+        //ibeamMesh.mesh.geometry.scale(0.5);
+        ibeamMesh.rotateX( Math.PI * 0.5);
+        ibeamMesh.translateX(0.0);
+        ibeamMesh.translateY(4.15);
+        ibeamMesh.translateZ(0.0);
+
+        // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
+        /*ibeamMesh.material = new THREE.MeshStandardMaterial({
+            map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png"),
+            //normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
+            //metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
+            metalness: 0.0, // value is multiplied by metalnessMap
+            color: 0x000000,
+            depthTest: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        */
+
+        ibeamParent = new THREE.Group();
+        ibeamParent.add(ibeamMesh);
+        meshLoaded();
+    });
+}
+
+// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= box models =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+function loadBoxModel(){
+    gltfLoader.load("models/cardboard_boxes/scene.gltf", (gltf) => {
+        console.log(gltf.scene.children[0].children[0].children[0].children);
+        /*const ibeamScale = 0.02;
 
         ibeamMesh.scale.x = ibeamScale;
         ibeamMesh.scale.y = ibeamScale;
@@ -314,8 +352,10 @@ function loadIbeamModel(){
         ibeamParent = new THREE.Group();
         ibeamParent.add(ibeamMesh);
         meshLoaded();
+        */
     });
 }
+
 
 
 function init(){
@@ -355,7 +395,7 @@ function init(){
     // integer position is used for corse grain colission detection & to avoid fp inaccuracies
     gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
     gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
-    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.5, 0.5);
+    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.3, 0.5);
     gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.direction = new THREE.Vector3(0.0,0.0,1.0);
@@ -368,6 +408,7 @@ function init(){
     scene.add(ambientLight);
 
     loadIbeamModel();
+    loadBoxModel();
 
     loadAirplaneModel();
     
@@ -406,16 +447,16 @@ function tick(){
 
     // translate game inputs into changes onto game state
     if(keyboard.pressed("up"))
-        gameState.acceleration.z = -0.5 // / chunkSize;
+        gameState.acceleration.z = -0.1 // / chunkSize;
     else if(keyboard.pressed("down"))
-        gameState.acceleration.z = 0.5 // / chunkSize;
+        gameState.acceleration.z = 0.1 // / chunkSize;
     else
         gameState.acceleration.z = 0.0;
 
     if(keyboard.pressed("left"))
-        gameState.acceleration.x = -0.5 // / chunkSize;
+        gameState.acceleration.x = -0.1 // / chunkSize;
     else if(keyboard.pressed("right"))
-        gameState.acceleration.x = 0.5 // / chunkSize;
+        gameState.acceleration.x = 0.1 // / chunkSize;
     else
         gameState.acceleration.x = 0.0;
 
