@@ -16,15 +16,20 @@ document.body.style.padding = 0;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 let renderer, scene, camera,
     postProcessing, renderPass,
-    chunkGroup, airplaneMesh, ibeamParent, ambientLight, directionalLight,
+    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight,
     clock, previousTime;
 
+const fogColor = 0x0b1a52;
+const floorColor = 0xc7d0f0;
+const ceilingColor = floorColor;
+const ibeamColor = 0x2b3763;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 
 // Reused Loaded Assets 
 let tileGeometry, tileMaterial;
+let ceilingGeometry, ceilingMaterial;
 
 const keyboard = new KeyboardState();
 
@@ -45,7 +50,7 @@ const gameState = {
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
 const loadedChunksRadius = 15;
-const _SEED_ = '1';
+const _SEED_ = 23452345;
 
 const zero = new THREE.Vector3(); // dont change this
 
@@ -172,6 +177,7 @@ function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
 function createChunkMesh(x, z){
     const chunkMesh = new THREE.Group();
     chunkMesh.name = chunkName(x,z);
+    const ceilingHeight = 4.0;
 
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
@@ -182,20 +188,38 @@ function createChunkMesh(x, z){
     tileMesh.rotateX(Math.PI * 0.5);
     chunkMesh.add(tileMesh);
 
+    // create ceiling
+    const ceilingMesh = new THREE.Mesh(ceilingGeometry, ceilingMaterial );
+    ceilingMesh.position.x = x * chunkSize;
+    ceilingMesh.position.z = z * chunkSize;
+    ceilingMesh.position.y = ceilingHeight;
+    ceilingMesh.rotateX(Math.PI * 1.5);
+    chunkMesh.add(ceilingMesh);
 
-    const ibeamInstance = ibeamParent.clone();
-    ibeamInstance.position.x = x * chunkSize;
-    ibeamInstance.position.z = z * chunkSize;
-    chunkMesh.add(ibeamInstance);
+
     // create i-beam
+    if( true ){
+        const ibeamInstance = ibeamObj.clone();
+        ibeamInstance.position.x = x * chunkSize;
+        ibeamInstance.position.z = z * chunkSize;
+        chunkMesh.add(ibeamInstance);
+    }
+
+    
         // only every 3rd chunk has a support beam
         // if(x and z something something)
         //  make the i beam
 
-    // create point light
+    // create point light... this wont work, point lights are added to thr fragment shader as uniforms
+    /*const decay = 2.0;
+    const intensity = 1.0
+    const ceilingLight = new THREE.PointLight( 0xffffff, intensity, chunkSize, decay);
+    ceilingLight.position.set((x + 0.5) * chunkSize, ceilingHeight, (z + 0.5) * chunkSize);
         // only every 3rd chunk has a light
         // some lights are flickering
         // some lights are out
+    chunkMesh.add(ceilingLight);
+    */
 
     // place, stack, & rotate boxes
         // each chunk has between 0 and 20 boxes, but anything over like 7 should be quite rare
@@ -279,36 +303,35 @@ function loadAirplaneModel(){
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= I-Beam model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function loadIbeamModel(){
     gltfLoader.load("models/painted_i-beam/scene.gltf", (gltf) => {
-        let ibeamMesh = gltf.scene.children[0];
+        let ibeamGeometry = gltf.scene.children[0].children[0].children[0].children[0].geometry;
         const ibeamScale = 0.02;
 
-        ibeamMesh.scale.x = ibeamScale;
-        ibeamMesh.scale.y = ibeamScale;
-        ibeamMesh.scale.z = ibeamScale;
-
-        // NEED THESE TO CENTER THE AIRPLANE MESH
-        //ibeamMesh.scale.set(new THREE.Vector3(1.0,1.0,1.0));
-        //ibeamMesh.mesh.geometry.scale(0.5);
-        ibeamMesh.rotateX( Math.PI * 0.5);
-        ibeamMesh.translateX(0.0);
-        ibeamMesh.translateY(4.15);
-        ibeamMesh.translateZ(0.0);
-
+        function onLoad(tex){
+            tex.offset.set(0.0,0.0);
+            //tex.rotation = Math.PI * -0.5
+        }
         // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-        /*ibeamMesh.material = new THREE.MeshStandardMaterial({
-            map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png"),
+        let ibeamMaterial = new THREE.MeshStandardMaterial({
+            map: textureLoader.load("textures/seamless_metal_texture_by_hhh316.jpeg", onLoad),
+            //map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png", onLoad),
             //normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
             //metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
-            metalness: 0.0, // value is multiplied by metalnessMap
-            color: 0x000000,
+            //metalness: 0.0, // value is multiplied by metalnessMap
+            color: ibeamColor,
+            //emissive: 0x000000,
             depthTest: true,
-            depthWrite: false,
+            depthWrite: true,
             side: THREE.DoubleSide
         });
-        */
+        
 
-        ibeamParent = new THREE.Group();
-        ibeamParent.add(ibeamMesh);
+        let ibeamMesh = new THREE.Mesh(ibeamGeometry, ibeamMaterial);
+        ibeamObj = new THREE.Object3D();
+        ibeamObj.add(ibeamMesh);
+        ibeamObj.scale.x = ibeamScale;
+        ibeamObj.scale.y = ibeamScale;
+        ibeamObj.scale.z = ibeamScale;
+        ibeamObj.rotateX( Math.PI * 0.5);
         meshLoaded();
     });
 }
@@ -319,20 +342,20 @@ function loadBoxModel(){
         console.log(gltf.scene.children[0].children[0].children[0].children);
         /*const ibeamScale = 0.02;
 
-        ibeamMesh.scale.x = ibeamScale;
-        ibeamMesh.scale.y = ibeamScale;
-        ibeamMesh.scale.z = ibeamScale;
+        ibeamObj.scale.x = ibeamScale;
+        ibeamObj.scale.y = ibeamScale;
+        ibeamObj.scale.z = ibeamScale;
 
         // NEED THESE TO CENTER THE AIRPLANE MESH
-        //ibeamMesh.scale.set(new THREE.Vector3(1.0,1.0,1.0));
-        //ibeamMesh.mesh.geometry.scale(0.5);
-        ibeamMesh.rotateX( Math.PI * 0.5);
-        ibeamMesh.translateX(0.0);
-        ibeamMesh.translateY(4.15);
-        ibeamMesh.translateZ(0.0);
+        //ibeamObj.scale.set(new THREE.Vector3(1.0,1.0,1.0));
+        //ibeamObj.mesh.geometry.scale(0.5);
+        ibeamObj.rotateX( Math.PI * 0.5);
+        ibeamObj.translateX(0.0);
+        ibeamObj.translateY(4.15);
+        ibeamObj.translateZ(0.0);
 
         // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-        ibeamMesh.material = new THREE.MeshStandardMaterial({
+        ibeamObj.material = new THREE.MeshStandardMaterial({
             map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png"),
             normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
             metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
@@ -340,8 +363,8 @@ function loadBoxModel(){
             color: 0xeeeeee,
         });
 
-        ibeamParent = new THREE.Group();
-        ibeamParent.add(ibeamMesh);
+        ibeamObj = new THREE.Group();
+        ibeamObj.add(ibeamObj);
         meshLoaded();
         */
     });
@@ -357,7 +380,6 @@ function init(){
     document.body.appendChild( renderer.domElement );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    const fogColor = 0x823a2f;
     scene = new THREE.Scene();
     scene.background = new THREE.Color(fogColor);
     scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
@@ -368,9 +390,16 @@ function init(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
     tileMaterial = new THREE.MeshStandardMaterial({
-        color: 0x574a48, 
-        emissive: 0x000000,
+        color: floorColor, 
         map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
+        side: THREE.DoubleSide,
+        wireframe: false,
+    });
+
+    ceilingGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
+    ceilingMaterial = new THREE.MeshStandardMaterial({
+        color: ceilingColor, 
+        map: textureLoader.load("/textures/8575-v7.jpeg"), 
         side: THREE.DoubleSide,
         wireframe: false,
     });
@@ -386,7 +415,7 @@ function init(){
     // integer position is used for corse grain colission detection & to avoid fp inaccuracies
     gameState.chunkCoordinate =  new THREE.Vector3(0,0,0); // ONLY THE X AND Z VALUES ARE USED
     gameState.prevChunkCoordinate = new THREE.Vector3(0,0,0);
-    gameState.positionInChunk =  new THREE.Vector3(0.5, 0.3, 0.5);
+    gameState.positionInChunk =  new THREE.Vector3(0.0, 0.3, 0.0);
     gameState.velocity =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.acceleration =  new THREE.Vector3(0.0,0.0,0.0);
     gameState.direction = new THREE.Vector3(0.0,0.0,1.0);
@@ -395,7 +424,7 @@ function init(){
     directionalLight = new THREE.DirectionalLight(0xffaa11, 0.8);
     ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     directionalLight.position.set( 0, 0, 5 ).normalize();
-    scene.add(directionalLight);
+    //scene.add(directionalLight);
     scene.add(ambientLight);
 
     loadIbeamModel();
