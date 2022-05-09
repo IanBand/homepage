@@ -22,10 +22,13 @@ My 3d engine criteria:
  ## Model Sources:
 - https://sketchfab.com/3d-models/painted-i-beam-aa8cc475c2a24b47b852d0929f252143
 - https://sketchfab.com/3d-models/paper-airplane-0967ab4a9c654a569a13ea1f8d9dca0c
-- https://sketchfab.com/3d-models/set-of-cardboard-boxes-8986ba512f704ac5b253286a0d1ad8bb
+- https://sketchfab.com/3d-models/cardboard-boxes-e6bcb1a9fcf64568ab6fea17220126c8
+
+- future: https://sketchfab.com/erroratten/collections/warehouse-pack
 
 ## Texture Sources:
 - https://www.deviantart.com/agf81/art/Seamless-Concrete-D651-338741360
+- https://www.filterforge.com/filters/8575-v7.html
 
 ## Code Sources
 - https://github.com/stemkoski/stemkoski.github.com/blob/master/Three.js/js/KeyboardState.js
