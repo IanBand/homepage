@@ -16,7 +16,7 @@ document.body.style.padding = 0;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 let renderer, scene, camera,
     postProcessing, renderPass,
-    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight,
+    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh,
     clock, previousTime;
 
 const fogColor = 0x0b1a52;
@@ -34,7 +34,7 @@ let ceilingGeometry, ceilingMaterial;
 const keyboard = new KeyboardState();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Keep track of loading =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const numberOfMeshesToLoad = 2;
+const numberOfMeshesToLoad = 3;
 let numberOfMeshesLoaded = 0, initFinished = false;
 
 
@@ -198,31 +198,22 @@ function createChunkMesh(x, z){
 
 
     // create i-beam
-    if( true ){
+    if( true ){ // ?
         const ibeamInstance = ibeamObj.clone();
         ibeamInstance.position.x = x * chunkSize;
         ibeamInstance.position.z = z * chunkSize;
         chunkMesh.add(ibeamInstance);
     }
-
-    
-        // only every 3rd chunk has a support beam
-        // if(x and z something something)
-        //  make the i beam
-
-    // create point light... this wont work, point lights are added to thr fragment shader as uniforms
-    /*const decay = 2.0;
-    const intensity = 1.0
-    const ceilingLight = new THREE.PointLight( 0xffffff, intensity, chunkSize, decay);
-    ceilingLight.position.set((x + 0.5) * chunkSize, ceilingHeight, (z + 0.5) * chunkSize);
-        // only every 3rd chunk has a light
-        // some lights are flickering
-        // some lights are out
-    chunkMesh.add(ceilingLight);
-    */
-
     // place, stack, & rotate boxes
         // each chunk has between 0 and 20 boxes, but anything over like 7 should be quite rare
+    let box1 = box1Mesh.clone();
+    
+    box1.position.x = (x + 0.3) * chunkSize;
+    box1.position.z = (z + 0.55) * chunkSize;
+    const boxScale = 1.0;
+    box1.scale.set(boxScale,boxScale,boxScale);
+
+    chunkMesh.add(box1);
     
     return chunkMesh;
 }
@@ -328,9 +319,7 @@ function loadIbeamModel(){
         let ibeamMesh = new THREE.Mesh(ibeamGeometry, ibeamMaterial);
         ibeamObj = new THREE.Object3D();
         ibeamObj.add(ibeamMesh);
-        ibeamObj.scale.x = ibeamScale;
-        ibeamObj.scale.y = ibeamScale;
-        ibeamObj.scale.z = ibeamScale;
+        ibeamObj.scale.set(ibeamScale, ibeamScale, ibeamScale);
         ibeamObj.rotateX( Math.PI * 0.5);
         meshLoaded();
     });
@@ -339,7 +328,10 @@ function loadIbeamModel(){
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= box models =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function loadBoxModel(){
     gltfLoader.load("models/cardboard_boxes/scene.gltf", (gltf) => {
-        console.log(gltf.scene.children[0].children[0].children[0].children);
+        console.log('boxes', gltf.scene.children[0].children[0].children[0].children);
+        box1Mesh = gltf.scene.children[0].children[0].children[0].children[0];
+        box2Mesh = gltf.scene.children[0].children[0].children[0].children[1];
+        box3Mesh = gltf.scene.children[0].children[0].children[0].children[2];
         /*const ibeamScale = 0.02;
 
         ibeamObj.scale.x = ibeamScale;
@@ -367,6 +359,7 @@ function loadBoxModel(){
         ibeamObj.add(ibeamObj);
         meshLoaded();
         */
+        meshLoaded();
     });
 }
 
@@ -509,7 +502,11 @@ function tick(){
     
 
 
-    let relativeCameraOffset = new THREE.Vector3(0.0,0.5,2.0);
+    let relativeCameraOffset = new THREE.Vector3(
+        0.0,
+        Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.5,
+        2.0
+    );
     let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneMesh.matrixWorld );
     
     camera.position.copy(cameraOffset);
