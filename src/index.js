@@ -227,8 +227,9 @@ function loadAirplaneModel(){
         let airplaneMaterial = new THREE.MeshStandardMaterial({
             map: textureLoader.load("models/paper_airplane/textures/papier_baseColor.jpeg"),
             //emissive: 0xffffff,
-            color: 0xff3333,
+            color: 0xccccff,
         });
+        //airplaneGeometry.center();
         airplaneMesh = new THREE.Mesh( airplaneGeometry, airplaneMaterial );
         scene.add(airplaneMesh);
         meshLoaded();
@@ -427,31 +428,27 @@ function tick(){
     );
 
 
-    //camera.position.y += 20.0 + Math.sin(elapsedTime * 2 * Math.PI * 0.1) * 0.03;
-    //airplaneMesh.position.y += 0.3 + Math.sin(elapsedTime * 2 * Math.PI * 0.2) * 0.1;
-    //airplaneMesh.rotation.x = Math.sin(Math.PI * 0.5 + elapsedTime * 2 * Math.PI * 0.2) * 0.2; 
-
-
-
-    gameState.rollAngle = Math.sin(elapsedTime * 0.5 * Math.PI) * Math.PI * 0.1;
-    airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0.0,0.0,1.0), gameState.rollAngle);
 
     if(gameState.velocity.distanceToSquared(zero) > 0.01){
         airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction /*TODO: average with prev direction here */, -1));
     }
 
 
-    
+    gameState.rollAngle = Math.sin(elapsedTime * 0.5 * Math.PI) * Math.PI * 0.1;
+    airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0.0,0.0,1.0), gameState.rollAngle);
+
 
 
     let relativeCameraOffset = new THREE.Vector3(
         0.0,
-        1.0,//Math.sin(elapsedTime * 2 * Math.PI * 0.1) * 0.03,
+        0.0,//Math.sin(elapsedTime * 2 * Math.PI * 0.1) * 0.03,
         2.0
     );
 
 
-    let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneMesh.matrixWorld ); // matrixWorld has been rotated
+    let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneMesh.matrixWorld ); // matrixWorld has been rotated?
+
+    cameraOffset.setY(cameraOffset.y + 0.3);
     
     camera.position.copy(cameraOffset);
 
@@ -478,7 +475,6 @@ function updateGameState(dt){
     // apply gravity
     //gameState.velocity.addScaledVector(gravity, dt);
     
-    //console.log(gameState.velocity);
     // apply minimum speed 
     if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
         gameState.velocity.set(0.0,0.0,0.0);
