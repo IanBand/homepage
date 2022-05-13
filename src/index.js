@@ -175,6 +175,8 @@ function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
 }
 
 function createChunkMesh(x, z){
+    // https://threejs.org/docs/#examples/en/geometries/TextGeometry
+    // use this for instructions and some numbers on beams and stuff. lables should be a1, a2, a3, then get cryptic like "k?", "??" "00" "NO" "GO" 
     const chunkMesh = new THREE.Group();
     chunkMesh.name = chunkName(x,z);
     const ceilingHeight = 4.0;
@@ -428,14 +430,17 @@ function tick(){
     );
 
 
+    //airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction /*TODO: average with prev direction here */, -1));
 
     if(gameState.velocity.distanceToSquared(zero) > 0.01){
-        airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction /*TODO: average with prev direction here */, -1));
+        airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction, -1)); 
     }
 
-
+    //PROBLEM: .lookAt and .setRotationFromAxisAngle overwrite eachother
+ 
     gameState.rollAngle = Math.sin(elapsedTime * 0.5 * Math.PI) * Math.PI * 0.1;
-    airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0.0,0.0,1.0), gameState.rollAngle);
+    //airplaneMesh.setRotationFromAxisAngle(gameState.direction, gameState.rollAngle); // sets quaternion
+    //airplaneMesh.setRotationFromAxisAngle(airplaneMesh.position.clone().addScaledVector(gameState.direction, -1).normalize(), gameState.rollAngle); // sets quaternion
 
 
 
@@ -516,4 +521,19 @@ function updateGameState(dt){
         gameState.positionInChunk.x -= Math.sign(gameState.positionInChunk.x);
     }
     
+}
+
+function applyStateToCharModel(){
+
+    //apply pitch & yaw
+
+    //apply roll (relative to plane central axis)
+
+    // apply wing flaps animation
+        // weighted average between curState & prevFrame (dt prob needs to be involved here)
+}
+
+function applyStateToCamera(){
+
+    // have camera follow airplane
 }
