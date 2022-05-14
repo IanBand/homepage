@@ -43,7 +43,7 @@ const gameState = {
     chunkCoordinate:     new THREE.Vector3(0,0,0), // ONLY THE X AND Z VALUES ARE USED,
     prevChunkCoordinate: new THREE.Vector3(0,0,0),
     positionInChunk:     new THREE.Vector3(0.0, 0.3, 0.0),
-    direction:           new THREE.Vector3(0.0,0.0,1.0),
+    heading:           new THREE.Vector3(0.0,0.0,1.0),
     velocity:            new THREE.Vector3(0.0,0.0,0.0),
     acceleration:        new THREE.Vector3(0.0,0.0,0.0),
     deflection:          new THREE.Vector2(0.0,0.0), // (VERTICAL DEFLECTION, HORIZONTAL DEFLECTION)
@@ -229,6 +229,7 @@ function loadAirplaneModel(){
         let airplaneMaterial = new THREE.MeshStandardMaterial({
             map: textureLoader.load("models/paper_airplane/textures/papier_baseColor.jpeg"),
             //emissive: 0xffffff,
+            side:  THREE.DoubleSide,
             color: 0xccccff,
         });
         //airplaneGeometry.center();
@@ -277,8 +278,11 @@ function loadBoxModel(){
     gltfLoader.load("models/cardboard_boxes/scene.gltf", (gltf) => {
         console.log('boxes', gltf.scene.children[0].children[0].children[0].children);
         box1Mesh = gltf.scene.children[0].children[0].children[0].children[0];
+        box1Mesh.removeFromParent();
         box2Mesh = gltf.scene.children[0].children[0].children[0].children[1];
+        box2Mesh.removeFromParent();
         box3Mesh = gltf.scene.children[0].children[0].children[0].children[2];
+        //box3Mesh.removeFromParent();
         /*const ibeamScale = 0.02;
 
         ibeamObj.scale.x = ibeamScale;
@@ -417,30 +421,7 @@ function tick(){
 
     updateGameState(deltaTime);
 
-
-    // apply updated game state to scene
-    
-    let airplanePosition = gameState.positionInChunk.clone();
-    airplanePosition.add(gameState.chunkCoordinate);
-    airplanePosition.multiplyScalar(chunkSize);
-    airplaneMesh.position.set(
-        airplanePosition.x, 
-        airplanePosition.y, 
-        airplanePosition.z
-    );
-
-
-    //airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction /*TODO: average with prev direction here */, -1));
-
-    if(gameState.velocity.distanceToSquared(zero) > 0.01){
-        airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.direction, -1)); 
-    }
-
-    //PROBLEM: .lookAt and .setRotationFromAxisAngle overwrite eachother
- 
-    gameState.rollAngle = Math.sin(elapsedTime * 0.5 * Math.PI) * Math.PI * 0.1;
-    //airplaneMesh.setRotationFromAxisAngle(gameState.direction, gameState.rollAngle); // sets quaternion
-    //airplaneMesh.setRotationFromAxisAngle(airplaneMesh.position.clone().addScaledVector(gameState.direction, -1).normalize(), gameState.rollAngle); // sets quaternion
+    applyStateToCharModel(elapsedTime);
 
 
 
@@ -486,10 +467,10 @@ function updateGameState(dt){
 
     }
 
-    // calculate direction
+    // calculate heading
     if(gameState.velocity.distanceToSquared(zero) >= epsilon){
         // TODO: Add lag 
-        gameState.direction.copy(gameState.velocity.clone().normalize());
+        gameState.heading.copy(gameState.velocity.clone().normalize());
     }
     
 
@@ -522,15 +503,56 @@ function updateGameState(dt){
     }
     
 }
+// apply updated game state to the airplane model, i.e. set position, pitch, yaw, roll & deflection
+function applyStateToCharModel(elapsedTime){
 
-function applyStateToCharModel(){
+    
+    // set position
+    let airplanePosition = gameState.positionInChunk.clone();
+    airplanePosition.add(gameState.chunkCoordinate);
+    airplanePosition.multiplyScalar(chunkSize);
+    airplaneMesh.position.set(
+        airplanePosition.x, 
+        airplanePosition.y, 
+        airplanePosition.z
+    );
 
-    //apply pitch & yaw
+    // reset orientation
+    airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
 
-    //apply roll (relative to plane central axis)
+    // apply heading
+    // let headingQuaternion = new THREE.Quaternion();
+    // console.log(gameState.velocity.clone().normalize());
+    // headingQuaternion.setFromAxisAngle(gameState.velocity.clone().normalize(), Math.PI * 0.0);
+    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
+    //airplaneMesh.applyQuaternion(headingQuaternion);
 
-    // apply wing flaps animation
+    // apply roll
+    gameState.rollAngle = Math.sin(elapsedTime * 1.7 * Math.PI) * 0.3;
+    let rollQuaternion = new THREE.Quaternion();
+
+
+    rollQuaternion.setFromAxisAngle( /*new THREE.Vector3( 0, 0, 1 )*/ gameState.heading.clone().normalize(), gameState.rollAngle);
+    airplaneMesh.applyQuaternion(rollQuaternion);
+    //airplaneMesh.setRotationFromAxisAngle(gameState.heading.clone().normalize(), gameState.rollAngle); // this dun work
+
+
+    // apply yaw (additional angle relative to heading)
+
+    // apply pitch
+
+
+    // apply deflection (animation)
         // weighted average between curState & prevFrame (dt prob needs to be involved here)
+
+
+    //airplaneMesh.setRotationFromAxisAngle(gameState.heading, gameState.rollAngle); // sets quaternion
+    //airplaneMesh.setRotationFromAxisAngle(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1).normalize(), gameState.rollAngle); // sets quaternion
+
+
+    //if(gameState.velocity.distanceToSquared(zero) > 0.01){
+    //    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
+    //}
 }
 
 function applyStateToCamera(){
