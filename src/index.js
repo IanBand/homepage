@@ -450,7 +450,7 @@ function tick(){
 function updateGameState(dt){
     const epsilon = 0.001;
     const dragCoefficent = -0.1;
-    const gravity = new THREE.Vector3(0, -0.5, 0);
+    const gravity = new THREE.Vector3(0, -0.02, 0);
 
     // apply acceleration
     gameState.velocity.addScaledVector(gameState.acceleration, dt);
@@ -459,7 +459,7 @@ function updateGameState(dt){
     gameState.velocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
 
     // apply gravity
-    //gameState.velocity.addScaledVector(gravity, dt);
+    // gameState.velocity.addScaledVector(gravity, dt);
     
     // apply minimum speed 
     if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
@@ -506,7 +506,6 @@ function updateGameState(dt){
 // apply updated game state to the airplane model, i.e. set position, pitch, yaw, roll & deflection
 function applyStateToCharModel(elapsedTime){
 
-    
     // set position
     let airplanePosition = gameState.positionInChunk.clone();
     airplanePosition.add(gameState.chunkCoordinate);
@@ -521,38 +520,20 @@ function applyStateToCharModel(elapsedTime){
     airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
 
     // apply heading
-    // let headingQuaternion = new THREE.Quaternion();
-    // console.log(gameState.velocity.clone().normalize());
-    // headingQuaternion.setFromAxisAngle(gameState.velocity.clone().normalize(), Math.PI * 0.0);
     airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
-    //airplaneMesh.applyQuaternion(headingQuaternion);
 
     // apply roll
     gameState.rollAngle = Math.sin(elapsedTime * 1.7 * Math.PI) * 0.3;
     let rollQuaternion = new THREE.Quaternion();
-
-
-    rollQuaternion.setFromAxisAngle( /*new THREE.Vector3( 0, 0, 1 )*/ gameState.heading.clone().normalize(), gameState.rollAngle);
+    rollQuaternion.setFromAxisAngle( gameState.heading.clone().normalize(), gameState.rollAngle);
     airplaneMesh.applyQuaternion(rollQuaternion);
-    //airplaneMesh.setRotationFromAxisAngle(gameState.heading.clone().normalize(), gameState.rollAngle); // this dun work
+    //airplaneMesh.setRotationFromAxisAngle(gameState.heading.clone().normalize(), gameState.rollAngle); // this dun work idk why
 
 
-    // apply yaw (additional angle relative to heading)
-
-    // apply pitch
-
+    // apply pitch & yaw? (additional 3d angle relative to heading). maybe I dont need this, need to think about determining heading first
 
     // apply deflection (animation)
         // weighted average between curState & prevFrame (dt prob needs to be involved here)
-
-
-    //airplaneMesh.setRotationFromAxisAngle(gameState.heading, gameState.rollAngle); // sets quaternion
-    //airplaneMesh.setRotationFromAxisAngle(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1).normalize(), gameState.rollAngle); // sets quaternion
-
-
-    //if(gameState.velocity.distanceToSquared(zero) > 0.01){
-    //    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
-    //}
 }
 
 function applyStateToCamera(){
