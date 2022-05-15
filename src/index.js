@@ -17,6 +17,7 @@ document.body.style.padding = 0;
 let renderer, scene, camera,
     postProcessing, renderPass,
     chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh,
+    headingHelper,
     clock, previousTime;
 
 const fogColor = 0x6682e8;
@@ -423,6 +424,12 @@ function tick(){
 
     applyStateToCharModel(elapsedTime);
 
+    // heading visualizer
+    if(headingHelper) headingHelper.removeFromParent(); 
+    
+    headingHelper = new THREE.ArrowHelper( gameState.heading, airplaneMesh.position, 1.0, 0xff0000 );
+    scene.add( headingHelper );
+
 
 
     let relativeCameraOffset = new THREE.Vector3(
@@ -458,6 +465,11 @@ function updateGameState(dt){
     // apply drag
     gameState.velocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
 
+    // apply boost
+    // velocity += heading.applyQuaternion(deflection) * boostStrength
+
+    //lift is upward force from forward velocity
+
     // apply gravity
     // gameState.velocity.addScaledVector(gravity, dt);
     
@@ -472,6 +484,9 @@ function updateGameState(dt){
         // TODO: Add lag 
         gameState.heading.copy(gameState.velocity.clone().normalize());
     }
+
+    
+
     
 
     // apply speed to position
@@ -503,6 +518,7 @@ function updateGameState(dt){
     }
     
 }
+
 // apply updated game state to the airplane model, i.e. set position, pitch, yaw, roll & deflection
 function applyStateToCharModel(elapsedTime){
 
@@ -521,9 +537,13 @@ function applyStateToCharModel(elapsedTime){
 
     // apply heading
     airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
+    
+    
+    
+    
 
     // apply roll
-    gameState.rollAngle = Math.sin(elapsedTime * 1.7 * Math.PI) * 0.3;
+    gameState.rollAngle = Math.sin(elapsedTime * 2.7 * Math.PI) * 0.2;
     let rollQuaternion = new THREE.Quaternion();
     rollQuaternion.setFromAxisAngle( gameState.heading.clone().normalize(), gameState.rollAngle);
     airplaneMesh.applyQuaternion(rollQuaternion);
