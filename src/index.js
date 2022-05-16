@@ -17,7 +17,8 @@ document.body.style.padding = 0;
 let renderer, scene, camera,
     postProcessing, renderPass,
     chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh,
-    headingHelper,
+    airplaneUp,
+    headingHelper, rollHelper, rollHelper2,
     clock, previousTime;
 
 const fogColor = 0x6682e8;
@@ -180,7 +181,7 @@ function createChunkMesh(x, z){
     // use this for instructions and some numbers on beams and stuff. lables should be a1, a2, a3, then get cryptic like "k?", "??" "00" "NO" "GO" 
     const chunkMesh = new THREE.Group();
     chunkMesh.name = chunkName(x,z);
-    const ceilingHeight = 4.0;
+    const ceilingHeight = 7.0;
 
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
@@ -205,6 +206,7 @@ function createChunkMesh(x, z){
         const ibeamInstance = ibeamObj.clone();
         ibeamInstance.position.x = x * chunkSize;
         ibeamInstance.position.z = z * chunkSize;
+        ibeamInstance.position.y += 4.2;
         chunkMesh.add(ibeamInstance);
     }
     // place, stack, & rotate boxes
@@ -424,26 +426,9 @@ function tick(){
 
     applyStateToCharModel(elapsedTime);
 
-    // heading visualizer
-    if(headingHelper) headingHelper.removeFromParent(); 
     
-    headingHelper = new THREE.ArrowHelper( gameState.heading, airplaneMesh.position, 1.0, 0xff0000 );
-    scene.add( headingHelper );
-
-
-
-    let relativeCameraOffset = new THREE.Vector3(
-        0.0,
-        0.0,//Math.sin(elapsedTime * 2 * Math.PI * 0.1) * 0.03,
-        2.0
-    );
-
-
-    let cameraOffset = relativeCameraOffset.applyMatrix4( airplaneMesh.matrixWorld ); // matrixWorld has been rotated?
-
-    cameraOffset.setY(cameraOffset.y + 0.3);
-    
-    camera.position.copy(cameraOffset);
+    camera.position.copy(airplaneMesh.position.clone().addScaledVector(gameState.heading, -2));
+    camera.position.setY(camera.position.y + 0.3);
 
     camera.lookAt(airplaneMesh.position);
 
@@ -457,6 +442,7 @@ function tick(){
 function updateGameState(dt){
     const epsilon = 0.001;
     const dragCoefficent = -0.1;
+    const liftFactor = 0.04; // what portion of speed becomes lift
     const gravity = new THREE.Vector3(0, -0.02, 0);
 
     // apply acceleration
@@ -468,16 +454,9 @@ function updateGameState(dt){
     // apply boost
     // velocity += heading.applyQuaternion(deflection) * boostStrength
 
-    //lift is upward force from forward velocity
-
     // apply gravity
-    // gameState.velocity.addScaledVector(gravity, dt);
+    gameState.velocity.addScaledVector(gravity, dt);
     
-    // apply minimum speed 
-    if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
-        gameState.velocity.set(0.0,0.0,0.0);
-
-    }
 
     // calculate heading
     if(gameState.velocity.distanceToSquared(zero) >= epsilon){
@@ -485,7 +464,19 @@ function updateGameState(dt){
         gameState.heading.copy(gameState.velocity.clone().normalize());
     }
 
-    
+    airplaneUp = new THREE.Vector3(0,1,0);
+    airplaneUp.cross(gameState.heading);
+    airplaneUp.normalize();
+    airplaneUp.applyAxisAngle(gameState.heading, gameState.rollAngle + Math.PI * 0.5);
+
+    // apply lift (lift is upward force from forward velocity)
+    gameState.velocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
+
+        // apply minimum speed 
+    if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
+        gameState.velocity.set(0.0,0.0,0.0);
+
+    }
 
     
 
@@ -537,6 +528,24 @@ function applyStateToCharModel(elapsedTime){
 
     // apply heading
     airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
+
+    // heading visualizer
+    if(headingHelper) headingHelper.removeFromParent(); 
+    headingHelper = new THREE.ArrowHelper( gameState.heading, airplaneMesh.position, 1.0, 0xff0000 );
+    scene.add( headingHelper );
+
+    //rotation visualizer
+    if(rollHelper) rollHelper.removeFromParent();
+    let airplaneSide = new THREE.Vector3(0,1,0);
+    airplaneSide.cross(gameState.heading);
+    airplaneSide.applyAxisAngle(gameState.heading, gameState.rollAngle);
+    rollHelper = new THREE.ArrowHelper( airplaneSide, airplaneMesh.position, 0.2, 0x00ff00 );
+    scene.add( rollHelper );
+    
+
+    if(rollHelper2) rollHelper2.removeFromParent();
+    rollHelper2 = new THREE.ArrowHelper( airplaneUp, airplaneMesh.position, 0.2, 0x0000ff );
+    scene.add( rollHelper2 );
     
     
     
