@@ -41,18 +41,23 @@ let numberOfMeshesLoaded = 0, initFinished = false;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // integer position is used for corse grain colission detection & to avoid fp inaccuracies
 const gameState = {
-    chunkCoordinate:     new THREE.Vector3(0,0,0), // (X COORDINATE, UNUSED, Z COORDINATE)
-    prevChunkCoordinate: new THREE.Vector3(0,0,0),
-    positionInChunk:     new THREE.Vector3(0.0,0.5,0.0),
-    heading:             new THREE.Vector3(0.0,0.0,1.0),
-    velocity:            new THREE.Vector3(0.0,0.0,0.7),
-    acceleration:        new THREE.Vector3(0.0,0.0,0.0),
+    chunkCoordinate:      new THREE.Vector3(0,0,0), // (X COORDINATE, UNUSED, Z COORDINATE)
+    prevChunkCoordinate:  new THREE.Vector3(0,0,0),
+    positionInChunk:      new THREE.Vector3(0.0,0.5,0.0),
+    heading:              new THREE.Vector3(0.0,0.0,1.0),
+    velocity:             new THREE.Vector3(0.0,0.0,0.7),
+    acceleration:         new THREE.Vector3(0.0,0.0,0.0),
     // TODO: change deflection vector to a pitch value and yaw value.
-    deflection:          new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION, YAW DEFLECTION, UNUSED)
-    deflectionSpeed:     new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION SPEED, YAW DEFLECTION SPEED, UNUSED)
-    rollAngle:           0.0,
-    rollSpeed:           0.0,
-    boosting:            false,
+    deflection:           new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION, YAW DEFLECTION, UNUSED)
+    deflectionSpeed:      new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION SPEED, YAW DEFLECTION SPEED, UNUSED)
+
+    yawDeflection:        0.0,
+    pitchDeflection:      0.0,
+    yawDeflectionSpeed:   0.0,
+    pitchDeflectionSpeed: 0.0,
+    rollAngle:            0.0,
+    rollSpeed:            0.0,
+    boosting:             false,
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
@@ -420,40 +425,33 @@ function tick(){
 
     camera.lookAt(airplaneMesh.position);
 
-
     // render
     postProcessing.composer.render( 0.1 );
-
 };
 function applyInputsToState(){
 
-    const deflectionSpeed = 0.1;
-    const baseRollSpeed = 1.1;
+    const baseDeflectionSpeed = 0.1;
+    const baseRollSpeed = 1.7;
 
-    gameState.deflectionSpeed.setX(0.0);
-    gameState.deflectionSpeed.setY(0.0);
+    gameState.yawDeflectionSpeed = 0.0;
+    gameState.pitchDeflectionSpeed = 0.0; 
     gameState.rollSpeed = 0.0;
     gameState.boosting = keyboard.pressed("space") ? true : false;
 
-
     // translate game inputs into changes onto game state
     if(keyboard.pressed("up")    || keyboard.pressed("W"))
-        gameState.deflectionSpeed.setX(gameState.deflectionSpeed.x + deflectionSpeed);
+        gameState.pitchDeflectionSpeed += baseDeflectionSpeed; 
     if(keyboard.pressed("down")  || keyboard.pressed("S"))
-        gameState.deflectionSpeed.setX(gameState.deflectionSpeed.x - deflectionSpeed);
+        gameState.pitchDeflectionSpeed -= baseDeflectionSpeed;
     if(keyboard.pressed("left")  || keyboard.pressed("A"))
-        gameState.deflectionSpeed.setY(gameState.deflectionSpeed.y + deflectionSpeed);
+        gameState.yawDeflectionSpeed   += baseDeflectionSpeed;
     if(keyboard.pressed("right") || keyboard.pressed("D"))
-        gameState.deflectionSpeed.setY(gameState.deflectionSpeed.y - deflectionSpeed);
+        gameState.yawDeflectionSpeed   -= baseDeflectionSpeed;
 
-    
-    if(keyboard.pressed("E")){
-        gameState.rollSpeed += baseRollSpeed;
-    }
-        
+    if(keyboard.pressed("E"))
+        gameState.rollSpeed += baseRollSpeed;    
     if(keyboard.pressed("Q"))
         gameState.rollSpeed -= baseRollSpeed;
-
 }
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Logic =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function updateGameState(dt){
@@ -469,13 +467,15 @@ function updateGameState(dt){
     const rollAttenuationRate = 0.3;
     const boostAcceleration = 1.0;
 
-
     // apply roll and deflection speeds to their positions
     gameState.rollAngle += gameState.rollSpeed * dt;
-    gameState.deflection.addScaledVector(gameState.deflectionSpeed, dt);
+    gameState.yawDeflection += gameState.yawDeflectionSpeed * dt;
+    gameState.pitchDeflection += gameState.pitchDeflectionSpeed * dt;
 
     // clamp roll angle and deflections
     // TODO: refactor this with clamp
+    // clamp roll angle if we want to attenuate it (this would be better with quaternions)
+    /*
     if(gameState.rollAngle <= -1.0 * Math.PI * 2){
         gameState.rollAngle -= Math.PI * 2;
     }
@@ -488,15 +488,13 @@ function updateGameState(dt){
     if(Math.abs(gameState.deflection.x) > maxPitchDeflection){
         gameState.deflection.setX(Math.sign(gameState.deflection.x) * maxPitchDeflection);
     }
+    */
 
-
-    // attenuate roll and deflections
-    gameState.rollAngle -= gameState.rollAngle * dt * rollAttenuationRate; // TODO: change roll to have a linear attenuation (it is currently asymptotic) or get rid of it
-
+    // attenuate roll
+    //gameState.rollAngle -= gameState.rollAngle * dt * rollAttenuationRate; // TODO: change roll to have a linear attenuation (it is currently asymptotic) or get rid of it
 
     // attenuate deflections
-    gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate); // TODO: change deflections to have a linear attenuation (it is currently asymptotic) or get rid of it
-
+    //gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate); // TODO: change deflections to have a linear attenuation (it is currently asymptotic) or get rid of it
 
     // apply acceleration
     gameState.velocity.addScaledVector(gameState.acceleration, dt); // this is unused?
@@ -512,7 +510,6 @@ function updateGameState(dt){
     // apply gravity
     gameState.velocity.addScaledVector(gravity, dt);
 
-
     // set airplane side vector
     airplaneSide = new THREE.Vector3(0,1,0);
     airplaneSide.cross(gameState.heading);
@@ -525,25 +522,21 @@ function updateGameState(dt){
     airplaneUp.normalize();
     airplaneUp.applyAxisAngle(gameState.heading, gameState.rollAngle + Math.PI * 0.5);
 
-
-
-    //apply deflections to velocity, penalize velocity magnitude by the magnitude of the deflections
+    //apply deflections to velocity
     let magnitude = gameState.velocity.distanceTo(zero);
-    gameState.velocity.addScaledVector(airplaneUp, gameState.deflection.x * pitchDeflectionCoefficent); 
-    gameState.velocity.addScaledVector(airplaneSide, gameState.deflection.y * yawDeflectionCoefficent);
+    gameState.velocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
+    gameState.velocity.addScaledVector(airplaneUp, gameState.pitchDeflection * pitchDeflectionCoefficent);
     gameState.velocity.setLength(magnitude);
 
     // set heading... TODO: make heading approach velocity or get rid of it
     gameState.heading = gameState.velocity.clone().normalize();
 
-
     // apply lift (lift is upward force from forward velocity)
     gameState.velocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
 
-        // apply minimum speed 
+    // apply minimum speed 
     if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
         gameState.velocity.set(0.0,0.0,0.0);
-
     }
 
     // apply speed to position
@@ -554,8 +547,7 @@ function updateGameState(dt){
 
     // check if we have crossed a chunk boundary
     if( zBoundaryCrossed || xBoundaryCrossed ){
-        //console.log('xz boundary crossed')
-        
+
         // save prev coordinates
         gameState.prevChunkCoordinate = gameState.chunkCoordinate.clone();
 
@@ -565,6 +557,7 @@ function updateGameState(dt){
     
         updateLoadedChunks();
     }
+
     // if needed, calc new positions within chunk
     if(zBoundaryCrossed){
         // if greater than one, subtract one. if less than 1, add 1
@@ -573,21 +566,16 @@ function updateGameState(dt){
     if(xBoundaryCrossed){
         gameState.positionInChunk.x -= Math.sign(gameState.positionInChunk.x);
     }
-    
 }
 
 // apply updated game state to the airplane model, i.e. set position, pitch, yaw, roll & deflection
-function applyStateToCharModel(elapsedTime){
+function applyStateToCharModel(){
 
     // set position
     let airplanePosition = gameState.positionInChunk.clone();
     airplanePosition.add(gameState.chunkCoordinate);
     airplanePosition.multiplyScalar(chunkSize);
-    airplaneMesh.position.set(
-        airplanePosition.x, 
-        airplanePosition.y, 
-        airplanePosition.z
-    );
+    airplaneMesh.position.copy(airplanePosition); 
 
     // reset orientation
     airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
@@ -602,19 +590,18 @@ function applyStateToCharModel(elapsedTime){
 
     // yaw deflection visualizer
     if(yawDeflectionHelper) yawDeflectionHelper.removeFromParent();
-    yawDeflectionHelper = new THREE.ArrowHelper( airplaneSide, airplaneMesh.position, gameState.deflection.y, 0x00ff00 );
+    yawDeflectionHelper = new THREE.ArrowHelper( airplaneSide, airplaneMesh.position, gameState.yawDeflection, 0x00ff00 );
     scene.add( yawDeflectionHelper );
     
     // pitch deflection visualizer
     if(pitchDeflectionHelper) pitchDeflectionHelper.removeFromParent();
-    pitchDeflectionHelper = new THREE.ArrowHelper( airplaneUp, airplaneMesh.position, gameState.deflection.x, 0x0000ff );
+    pitchDeflectionHelper = new THREE.ArrowHelper( airplaneUp, airplaneMesh.position, gameState.pitchDeflection, 0x0000ff );
     scene.add( pitchDeflectionHelper );
     
     // apply roll
     let rollQuaternion = new THREE.Quaternion();
     rollQuaternion.setFromAxisAngle( gameState.heading.clone().normalize(), gameState.rollAngle);
     airplaneMesh.applyQuaternion(rollQuaternion);
-    //airplaneMesh.setRotationFromAxisAngle(gameState.heading.clone().normalize(), gameState.rollAngle); // this dun work idk why
 
     // apply deflection (animation)
         // weighted average between curState & prevFrame (dt prob needs to be involved here)
