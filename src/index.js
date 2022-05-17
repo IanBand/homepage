@@ -5,7 +5,6 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
-import { Vector3 } from 'three';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -48,6 +47,7 @@ const gameState = {
     heading:             new THREE.Vector3(0.0,0.0,1.0),
     velocity:            new THREE.Vector3(0.0,0.0,0.7),
     acceleration:        new THREE.Vector3(0.0,0.0,0.0),
+    // TODO: change deflection vector to a pitch value and yaw value.
     deflection:          new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION, YAW DEFLECTION, UNUSED)
     deflectionSpeed:     new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION SPEED, YAW DEFLECTION SPEED, UNUSED)
     rollAngle:           0.0,
@@ -471,11 +471,11 @@ function updateGameState(dt){
 
 
     // apply roll and deflection speeds to their positions
-
     gameState.rollAngle += gameState.rollSpeed * dt;
     gameState.deflection.addScaledVector(gameState.deflectionSpeed, dt);
 
     // clamp roll angle and deflections
+    // TODO: refactor this with clamp
     if(gameState.rollAngle <= -1.0 * Math.PI * 2){
         gameState.rollAngle -= Math.PI * 2;
     }
@@ -491,13 +491,11 @@ function updateGameState(dt){
 
 
     // attenuate roll and deflections
-    gameState.rollAngle -= gameState.rollAngle * dt * rollAttenuationRate;
-
-    //console.log(gameState.rollSpeed, gameState.rollAngle);
+    gameState.rollAngle -= gameState.rollAngle * dt * rollAttenuationRate; // TODO: change roll to have a linear attenuation (it is currently asymptotic) or get rid of it
 
 
-    // TODO: subtract a scalar instead 
-    gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate);
+    // attenuate deflections
+    gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate); // TODO: change deflections to have a linear attenuation (it is currently asymptotic) or get rid of it
 
 
     // apply acceleration
@@ -531,12 +529,12 @@ function updateGameState(dt){
 
     //apply deflections to velocity, penalize velocity magnitude by the magnitude of the deflections
     let magnitude = gameState.velocity.distanceTo(zero);
-    gameState.velocity.addScaledVector(airplaneUp, gameState.deflection.x * pitchDeflectionCoefficent);
+    gameState.velocity.addScaledVector(airplaneUp, gameState.deflection.x * pitchDeflectionCoefficent); 
     gameState.velocity.addScaledVector(airplaneSide, gameState.deflection.y * yawDeflectionCoefficent);
     gameState.velocity.setLength(magnitude);
 
+    // set heading... TODO: make heading approach velocity or get rid of it
     gameState.heading = gameState.velocity.clone().normalize();
-
 
 
     // apply lift (lift is upward force from forward velocity)
@@ -547,8 +545,6 @@ function updateGameState(dt){
         gameState.velocity.set(0.0,0.0,0.0);
 
     }
-
-    
 
     // apply speed to position
     gameState.positionInChunk.addScaledVector(gameState.velocity, dt);
@@ -604,32 +600,16 @@ function applyStateToCharModel(elapsedTime){
     headingHelper = new THREE.ArrowHelper( gameState.heading, airplaneMesh.position, 1.0, 0xff0000 );
     scene.add( headingHelper );
 
-    //rotation visualizer
+    // yaw deflection visualizer
     if(yawDeflectionHelper) yawDeflectionHelper.removeFromParent();
     yawDeflectionHelper = new THREE.ArrowHelper( airplaneSide, airplaneMesh.position, gameState.deflection.y, 0x00ff00 );
     scene.add( yawDeflectionHelper );
     
-
-    
+    // pitch deflection visualizer
     if(pitchDeflectionHelper) pitchDeflectionHelper.removeFromParent();
     pitchDeflectionHelper = new THREE.ArrowHelper( airplaneUp, airplaneMesh.position, gameState.deflection.x, 0x0000ff );
     scene.add( pitchDeflectionHelper );
     
-
-
-
-    /*
-    if(deflectionHelper) deflectionHelper.removeFromParent();
-    deflectionHelper = new THREE.ArrowHelper( 
-        gameState.deflection,
-        new THREE.Vector3(airplaneMesh.position.x, airplaneMesh.position.y + 1.0, airplaneMesh.position.z), 
-        gameState.deflection.distanceToSquared(zero), 
-        0xffff00
-    );
-    scene.add(  deflectionHelper );
-        //gameState.deflection
-    */
-
     // apply roll
     let rollQuaternion = new THREE.Quaternion();
     rollQuaternion.setFromAxisAngle( gameState.heading.clone().normalize(), gameState.rollAngle);
