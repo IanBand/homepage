@@ -461,11 +461,12 @@ function updateGameState(dt){
     const gravity = new THREE.Vector3(0, -0.02, 0);
     const pitchDeflectionCoefficent = 0.009;
     const yawDeflectionCoefficent = 0.005;
+    const boostAcceleration = 1.0;
+
     const maxYawDeflection = 0.5;
     const maxPitchDeflection = 0.5;
     const deflectionAttenuationRate = -0.7; // how fast do the deflections return to 0
     const rollAttenuationRate = 0.3;
-    const boostAcceleration = 1.0;
 
     // apply roll and deflection speeds to their positions
     gameState.rollAngle += gameState.rollSpeed * dt;
@@ -490,8 +491,11 @@ function updateGameState(dt){
     }
     */
 
-    // attenuate roll
-    //gameState.rollAngle -= gameState.rollAngle * dt * rollAttenuationRate; // TODO: change roll to have a linear attenuation (it is currently asymptotic) or get rid of it
+    // attenuate roll TODO: change roll to quaternion so we dont have to deal with all the edge cases
+    /*if(Math.abs(gameState.rollAngle) <= rollAttenuationRate * dt) 
+        gameState.rollAngle = 0;
+    else gameState.rollAngle -= Math.sign(gameState.rollAngle) * dt * rollAttenuationRate;
+    */
 
     // attenuate deflections
     //gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate); // TODO: change deflections to have a linear attenuation (it is currently asymptotic) or get rid of it
@@ -522,10 +526,10 @@ function updateGameState(dt){
     airplaneUp.normalize();
     airplaneUp.applyAxisAngle(gameState.heading, gameState.rollAngle + Math.PI * 0.5);
 
-    //apply deflections to velocity
+    //apply deflections to velocity TODO: look into making these quaternion rotations
     let magnitude = gameState.velocity.distanceTo(zero);
     gameState.velocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
-    gameState.velocity.addScaledVector(airplaneUp, gameState.pitchDeflection * pitchDeflectionCoefficent);
+    gameState.velocity.addScaledVector(airplaneUp,   gameState.pitchDeflection * pitchDeflectionCoefficent);
     gameState.velocity.setLength(magnitude);
 
     // set heading... TODO: make heading approach velocity or get rid of it
