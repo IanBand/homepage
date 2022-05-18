@@ -47,10 +47,6 @@ const gameState = {
     heading:              new THREE.Vector3(0.0,0.0,1.0),
     velocity:             new THREE.Vector3(0.0,0.0,0.7),
     acceleration:         new THREE.Vector3(0.0,0.0,0.0),
-    // TODO: change deflection vector to a pitch value and yaw value.
-    deflection:           new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION, YAW DEFLECTION, UNUSED)
-    deflectionSpeed:      new THREE.Vector3(0.0,0.0,0.0), // (PITCH DEFLECTION SPEED, YAW DEFLECTION SPEED, UNUSED)
-
     yawDeflection:        0.0,
     pitchDeflection:      0.0,
     yawDeflectionSpeed:   0.0,
@@ -68,23 +64,33 @@ const zero = new THREE.Vector3(); // dont change this
 
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= debug gui =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-//const gui = new dat.GUI();
+const gui = new dat.GUI();
 
 const debugVars = {
     fov: 15,
-    px: 0,
-    py: 0,
-    pz: 0,
-    airx: 0,
-    airy: 0,
-    airz: 0,
+    dragCoefficent: -0.1,
+    liftFactor: 0.004,
+    gravity_YCmp: -0.02,
+    pitchDeflectionCoefficent: 0.009,
+    yawDeflectionCoefficent: 0.005,
+    boostAcceleration: 1.0,
+    deflectionSpeed: 0.1,
+    rollSpeed: 1.7,
+    minMaxHeadingAngleRadians: Math.PI * 0.25, 
 }
 
-//gui.add(debugVars, "fov", 10, 150);
-/*gui.add(debugVars, "px", -4, 4);
-gui.add(debugVars, "py", -4, 4);
-gui.add(debugVars, "pz", -4, 4);
-*/
+gui.add(debugVars, "fov", 10, 150);
+gui.add(debugVars,"dragCoefficent",-0.5,0.0);
+gui.add(debugVars,"liftFactor",0.0,0.01);
+gui.add(debugVars,"gravity_YCmp",-0.5,0.0);
+gui.add(debugVars,"pitchDeflectionCoefficent",0.0001,0.001);
+gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.001);
+gui.add(debugVars,"boostAcceleration",0.0,5.0);
+gui.add(debugVars,"deflectionSpeed",0.0,10.0);
+gui.add(debugVars,"rollSpeed",0.1,5.0);
+gui.add(debugVars,"minMaxHeadingAngleRadians",-Math.PI * 0.25,Math.PI * 0.25);
+//gui.add(debugVars,"",,);
+
 
 init();
 
@@ -430,8 +436,8 @@ function tick(){
 };
 function applyInputsToState(){
 
-    const baseDeflectionSpeed = 0.1;
-    const baseRollSpeed = 1.7;
+    const deflectionSpeed = debugVars.deflectionSpeed; //0.1;
+    const rollSpeed = debugVars.rollSpeed; //1.7;
 
     gameState.yawDeflectionSpeed = 0.0;
     gameState.pitchDeflectionSpeed = 0.0; 
@@ -440,28 +446,28 @@ function applyInputsToState(){
 
     // translate game inputs into changes onto game state
     if(keyboard.pressed("up")    || keyboard.pressed("W"))
-        gameState.pitchDeflectionSpeed += baseDeflectionSpeed; 
+        gameState.pitchDeflectionSpeed += deflectionSpeed; 
     if(keyboard.pressed("down")  || keyboard.pressed("S"))
-        gameState.pitchDeflectionSpeed -= baseDeflectionSpeed;
+        gameState.pitchDeflectionSpeed -= deflectionSpeed;
     if(keyboard.pressed("left")  || keyboard.pressed("A"))
-        gameState.yawDeflectionSpeed   += baseDeflectionSpeed;
+        gameState.yawDeflectionSpeed   += deflectionSpeed;
     if(keyboard.pressed("right") || keyboard.pressed("D"))
-        gameState.yawDeflectionSpeed   -= baseDeflectionSpeed;
+        gameState.yawDeflectionSpeed   -= deflectionSpeed;
 
     if(keyboard.pressed("E"))
-        gameState.rollSpeed += baseRollSpeed;    
+        gameState.rollSpeed += rollSpeed;    
     if(keyboard.pressed("Q"))
-        gameState.rollSpeed -= baseRollSpeed;
+        gameState.rollSpeed -= rollSpeed;
 }
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Logic =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function updateGameState(dt){
     const epsilon = 0.00001;
-    const dragCoefficent = -0.1;
-    const liftFactor = 0.004; // what portion of speed becomes lift
-    const gravity = new THREE.Vector3(0, -0.02, 0);
-    const pitchDeflectionCoefficent = 0.009;
-    const yawDeflectionCoefficent = 0.005;
-    const boostAcceleration = 1.0;
+    const dragCoefficent = debugVars.dragCoefficent; //-0.1;
+    const liftFactor = debugVars.liftFactor; //0.004; // what portion of speed becomes lift
+    const gravity = new THREE.Vector3(0, debugVars.gravity_YCmp, 0); //new THREE.Vector3(0, -0.02, 0);
+    const pitchDeflectionCoefficent = debugVars.pitchDeflectionCoefficent; //0.009;
+    const yawDeflectionCoefficent = debugVars.yawDeflectionCoefficent; //0.005;
+    const boostAcceleration = debugVars.boostAcceleration; //1.0;
 
     const maxYawDeflection = 0.5;
     const maxPitchDeflection = 0.5;
