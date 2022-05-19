@@ -5,6 +5,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
+import { Vector3 } from 'three';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -74,9 +75,9 @@ const debugVars = {
     pitchDeflectionCoefficent: 0.009,
     yawDeflectionCoefficent: 0.005,
     boostAcceleration: 1.0,
-    deflectionSpeed: 0.1,
+    deflectionSpeed: 4.0,
     rollSpeed: 1.7,
-    minMaxHeadingAngleRadians: Math.PI * 0.25, 
+    minMaxHeadingAngleRadians: Math.PI * 0.35, 
 }
 
 gui.add(debugVars, "fov", 10, 150);
@@ -88,7 +89,7 @@ gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.001);
 gui.add(debugVars,"boostAcceleration",0.0,5.0);
 gui.add(debugVars,"deflectionSpeed",0.0,10.0);
 gui.add(debugVars,"rollSpeed",0.1,5.0);
-gui.add(debugVars,"minMaxHeadingAngleRadians",-Math.PI * 0.25,Math.PI * 0.25);
+gui.add(debugVars,"minMaxHeadingAngleRadians",0,Math.PI);
 //gui.add(debugVars,"",,);
 
 
@@ -468,6 +469,7 @@ function updateGameState(dt){
     const pitchDeflectionCoefficent = debugVars.pitchDeflectionCoefficent; //0.009;
     const yawDeflectionCoefficent = debugVars.yawDeflectionCoefficent; //0.005;
     const boostAcceleration = debugVars.boostAcceleration; //1.0;
+    const minMaxHeadingAngleRadians = debugVars.minMaxHeadingAngleRadians;
 
     const maxYawDeflection = 0.5;
     const maxPitchDeflection = 0.5;
@@ -546,10 +548,30 @@ function updateGameState(dt){
 
     // apply minimum speed 
     if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
-        gameState.velocity.set(0.0,0.0,0.0);
+        gameState.velocity.set(1.0,0.0,0.0);
     }
 
-    // apply speed to position
+    // apply min and max heading angles to velocity
+    // TODO: put in a warning zone? Do something other than clamping the angle (i.e. make the plane crash or fall out of the sky, make it impossible to control)?
+    let horizonAngle = gameState.velocity.angleTo(new THREE.Vector3(0,1,0));
+    let velocityNormalFromBirdsEyePOV = new THREE.Vector3().crossVectors(
+        new THREE.Vector3(gameState.velocity.x, 0, gameState.velocity.z),
+        gameState.velocity, 
+    );
+    velocityNormalFromBirdsEyePOV.normalize();
+    if(horizonAngle < minMaxHeadingAngleRadians){
+        console.log('heading too high!');
+        /*gameState.velocity.applyAxisAngle( // does not work to clamp
+            velocityNormalFromBirdsEyePOV,
+            horizonAngle - minMaxHeadingAngleRadians
+        );*/ 
+    }
+    if(horizonAngle > Math.PI - minMaxHeadingAngleRadians){ 
+        console.log('heading too low!');
+    }
+
+
+    // apply velocity to position
     gameState.positionInChunk.addScaledVector(gameState.velocity, dt);
 
     const xBoundaryCrossed = gameState.positionInChunk.x >= 1.0 || gameState.positionInChunk.x <  0.0;
