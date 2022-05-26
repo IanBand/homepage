@@ -1,11 +1,11 @@
 import * as THREE from 'three';
+import * as MathUtils from 'three/src/math/MathUtils.js';
 import * as dat from "lil-gui";
 
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
-import { Vector3 } from 'three';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -25,6 +25,7 @@ const fogColor = 0x6682e8;
 const floorColor = 0xc7d0f0;
 const ceilingColor = floorColor;
 const ibeamColor = 0x2b3763;
+
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
@@ -198,13 +199,50 @@ function createChunkMesh(x, z){
     chunkMesh.name = chunkName(x,z);
     const ceilingHeight = 7.0;
 
+    const terrainVerts = [];
+    const tilesPerChunk = 10;
+    for(let i = 0; i < tilesPerChunk + 1; i++){
+        terrainVerts.push([]);
+        for(let j = 0; j < tilesPerChunk + 1; j++){
+            terrainVerts[i][j] = {x: i * chunkSize / (tilesPerChunk), y: Math.random(), z: j * chunkSize / (tilesPerChunk)}
+        }
+    }
+    const triVertices = [];
+    for(let i = 0; i < tilesPerChunk; i++){
+        for(let j = 0; j < tilesPerChunk; j++){
+            const topLeftVert     = terrainVerts[i][j];
+            const topRightVert    = terrainVerts[i][j + 1];
+            const bottomLeftVert  = terrainVerts[i + 1][j];
+            const bottomRightVert = terrainVerts[i + 1][j + 1];
+
+            // push two triangles for each tile
+            // both triangles go counterclockwise
+            triVertices.push(
+                // first tri
+                bottomLeftVert.x,  bottomLeftVert.y,  bottomLeftVert.z,
+                bottomRightVert.x, bottomRightVert.y, bottomRightVert.z,
+                topRightVert.x,    topRightVert.y,    topRightVert.z,
+
+                // second tri
+                topLeftVert.x,     topLeftVert.y,     topLeftVert.z,
+                bottomLeftVert.x,  bottomLeftVert.y,  bottomLeftVert.z,
+                topRightVert.x,    topRightVert.y,    topRightVert.z
+            )
+
+        }
+    }
+
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
     // create floor tile
-    const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
+    //const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
+    const randHeightGeometry = new THREE.BufferGeometry();
+    randHeightGeometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array(triVertices), 3 ) );
+
+    const tileMesh = new THREE.Mesh( randHeightGeometry, tileMaterial );
     tileMesh.position.x = x * chunkSize;
     tileMesh.position.z = z * chunkSize;
-    tileMesh.rotateX(Math.PI * 0.5);
+    //tileMesh.rotateX(Math.PI * 0.5);
     chunkMesh.add(tileMesh);
 
     // create ceiling
@@ -353,7 +391,7 @@ function init(){
     tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
     tileMaterial = new THREE.MeshStandardMaterial({
         color: floorColor, 
-        map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
+        //map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
         side: THREE.DoubleSide,
         wireframe: false,
     });
@@ -471,104 +509,86 @@ function updateGameState(dt){
     const boostAcceleration = debugVars.boostAcceleration; //1.0;
     const minMaxHeadingAngleRadians = debugVars.minMaxHeadingAngleRadians;
 
-    const maxYawDeflection = 0.5;
-    const maxPitchDeflection = 0.5;
+    const maxYawDeflection = 0.2;
+    const maxPitchDeflection = 0.6;
     const deflectionAttenuationRate = -0.7; // how fast do the deflections return to 0
     const rollAttenuationRate = 0.3;
 
     // apply roll and deflection speeds to their positions
-    gameState.rollAngle += gameState.rollSpeed * dt;
-    gameState.yawDeflection += gameState.yawDeflectionSpeed * dt;
+    gameState.rollAngle       += gameState.rollSpeed            * dt;
+    gameState.yawDeflection   += gameState.yawDeflectionSpeed   * dt;
     gameState.pitchDeflection += gameState.pitchDeflectionSpeed * dt;
 
     // clamp roll angle and deflections
-    // TODO: refactor this with clamp
-    // clamp roll angle if we want to attenuate it (this would be better with quaternions)
-    /*
-    if(gameState.rollAngle <= -1.0 * Math.PI * 2){
-        gameState.rollAngle -= Math.PI * 2;
-    }
-    if(gameState.rollAngle >=  Math.PI * 2){
-        gameState.rollAngle += Math.PI * 2;
-    }
-    if(Math.abs(gameState.deflection.y) > maxYawDeflection){
-        gameState.deflection.setY(Math.sign(gameState.deflection.y) * maxYawDeflection);
-    }
-    if(Math.abs(gameState.deflection.x) > maxPitchDeflection){
-        gameState.deflection.setX(Math.sign(gameState.deflection.x) * maxPitchDeflection);
-    }
-    */
+    // if we want to roll angle and deflections to attenuate over time, we need to use quaternions
+    //gameState.rollAngle = MathUtils.clamp(gameState.rollAngle, -1 * Math.PI, Math.PI);
+    gameState.yawDeflection   = MathUtils.clamp(gameState.yawDeflection,   -1 * maxYawDeflection,   maxYawDeflection  );
+    gameState.pitchDeflection = MathUtils.clamp(gameState.pitchDeflection, -1 * maxPitchDeflection, maxPitchDeflection);
 
-    // attenuate roll TODO: change roll to quaternion so we dont have to deal with all the edge cases
-    /*if(Math.abs(gameState.rollAngle) <= rollAttenuationRate * dt) 
-        gameState.rollAngle = 0;
-    else gameState.rollAngle -= Math.sign(gameState.rollAngle) * dt * rollAttenuationRate;
-    */
-
-    // attenuate deflections
-    //gameState.deflection.addScaledVector(gameState.deflection, dt * deflectionAttenuationRate); // TODO: change deflections to have a linear attenuation (it is currently asymptotic) or get rid of it
-
-    // apply acceleration
-    gameState.velocity.addScaledVector(gameState.acceleration, dt); // this is unused?
-
-    // apply drag
-    gameState.velocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
-
-    // apply boost
-    if(gameState.boosting){
-        gameState.velocity.addScaledVector(gameState.heading, boostAcceleration * dt);
-    }
-    
-    // apply gravity
-    gameState.velocity.addScaledVector(gravity, dt);
+    let nextVelocity = gameState.velocity.clone();
 
     // set airplane side vector
     airplaneSide = new THREE.Vector3(0,1,0);
-    airplaneSide.cross(gameState.heading);
+    airplaneSide.cross(nextVelocity);
     airplaneSide.normalize();
-    airplaneSide.applyAxisAngle(gameState.heading, gameState.rollAngle);
+    airplaneSide.applyAxisAngle(nextVelocity, gameState.rollAngle);
     
     // set airplane up vector
     airplaneUp = new THREE.Vector3(0,1,0);
-    airplaneUp.cross(gameState.heading);
+    airplaneUp.cross(nextVelocity);
     airplaneUp.normalize();
-    airplaneUp.applyAxisAngle(gameState.heading, gameState.rollAngle + Math.PI * 0.5);
+    airplaneUp.applyAxisAngle(nextVelocity, gameState.rollAngle + Math.PI * 0.5);
 
     //apply deflections to velocity TODO: look into making these quaternion rotations
-    let magnitude = gameState.velocity.distanceTo(zero);
-    gameState.velocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
-    gameState.velocity.addScaledVector(airplaneUp,   gameState.pitchDeflection * pitchDeflectionCoefficent);
-    gameState.velocity.setLength(magnitude);
+    let magnitude = nextVelocity.distanceTo(zero);
+    nextVelocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
+    nextVelocity.addScaledVector(airplaneUp,   gameState.pitchDeflection * pitchDeflectionCoefficent);
+    nextVelocity.setLength(magnitude);
+
+    // apply acceleration
+    nextVelocity.addScaledVector(gameState.acceleration, dt); // this is unused?
+
+    // apply drag
+    nextVelocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
+
+    // apply boost
+    if(gameState.boosting){
+        nextVelocity.addScaledVector(gameState.heading, boostAcceleration * dt);
+    }
+    
+    // apply gravity
+    nextVelocity.addScaledVector(gravity, dt);
+
 
     // set heading... TODO: make heading approach velocity or get rid of it
-    gameState.heading = gameState.velocity.clone().normalize();
+    //gameState.heading = gameState.velocity.clone().normalize();
 
     // apply lift (lift is upward force from forward velocity)
-    gameState.velocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
+    nextVelocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
 
     // apply minimum speed 
-    if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
+    /*if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
         gameState.velocity.set(1.0,0.0,0.0);
-    }
+    }*/
 
     // apply min and max heading angles to velocity
     // TODO: put in a warning zone? Do something other than clamping the angle (i.e. make the plane crash or fall out of the sky, make it impossible to control)?
-    let horizonAngle = gameState.velocity.angleTo(new THREE.Vector3(0,1,0));
+    let horizonAngle = nextVelocity.angleTo(new THREE.Vector3(0,1,0));
     let velocityNormalFromBirdsEyePOV = new THREE.Vector3().crossVectors(
-        new THREE.Vector3(gameState.velocity.x, 0, gameState.velocity.z),
-        gameState.velocity, 
+        new THREE.Vector3(nextVelocity.x, 0, nextVelocity.z),
+        nextVelocity, 
     );
     velocityNormalFromBirdsEyePOV.normalize();
-    if(horizonAngle < minMaxHeadingAngleRadians){
-        console.log('heading too high!');
-        /*gameState.velocity.applyAxisAngle( // does not work to clamp
-            velocityNormalFromBirdsEyePOV,
-            horizonAngle - minMaxHeadingAngleRadians
-        );*/ 
+    if((horizonAngle < minMaxHeadingAngleRadians) || (horizonAngle > Math.PI - minMaxHeadingAngleRadians)){
+        console.log('heading too extreme!');
+        let nextXZ = Math.sqrt(nextVelocity.x * nextVelocity.x + nextVelocity.z * nextVelocity.z);
+        let prevXZ = Math.sqrt(gameState.velocity.x * gameState.velocity.x + gameState.velocity.z * gameState.velocity.z);
+        if(nextXZ < prevXZ){
+            nextVelocity.setY(nextVelocity.y * (1 + ( nextXZ - prevXZ) / prevXZ ));
+        }
     }
-    if(horizonAngle > Math.PI - minMaxHeadingAngleRadians){ 
-        console.log('heading too low!');
-    }
+ 
+    gameState.velocity.copy(nextVelocity);
 
 
     // apply velocity to position
@@ -613,11 +633,11 @@ function applyStateToCharModel(){
     airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
 
     // apply heading
-    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.heading, -1)); 
+    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.velocity.normalize(), -1)); 
 
     // heading visualizer
     if(headingHelper) headingHelper.removeFromParent(); 
-    headingHelper = new THREE.ArrowHelper( gameState.heading, airplaneMesh.position, 1.0, 0xff0000 );
+    headingHelper = new THREE.ArrowHelper( gameState.velocity.normalize(), airplaneMesh.position, 1.0, 0xff0000 );
     scene.add( headingHelper );
 
     // yaw deflection visualizer
@@ -632,7 +652,7 @@ function applyStateToCharModel(){
     
     // apply roll
     let rollQuaternion = new THREE.Quaternion();
-    rollQuaternion.setFromAxisAngle( gameState.heading.clone().normalize(), gameState.rollAngle);
+    rollQuaternion.setFromAxisAngle( gameState.velocity.normalize(), gameState.rollAngle);
     airplaneMesh.applyQuaternion(rollQuaternion);
 
     // apply deflection (animation)
