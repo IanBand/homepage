@@ -6,6 +6,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
+//import seedrandom from 'seedrandom';
+import {ImprovedNoise} from 'three/examples/jsm/math/ImprovedNoise.js'
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -25,6 +27,8 @@ const fogColor = 0x6682e8;
 const floorColor = 0xc7d0f0;
 const ceilingColor = floorColor;
 const ibeamColor = 0x2b3763;
+
+const perlin = new ImprovedNoise();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
@@ -59,7 +63,7 @@ const gameState = {
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
-const loadedChunksRadius = 15;
+const loadedChunksRadius = 5;
 const _SEED_ = 23452345;
 
 const zero = new THREE.Vector3(); // dont change this
@@ -199,63 +203,82 @@ function createChunkMesh(x, z){
     chunkMesh.name = chunkName(x,z);
     const ceilingHeight = 7.0;
 
-    const terrainVerts = [];
-    const tilesPerChunk = 10;
-    for(let i = 0; i < tilesPerChunk + 1; i++){
-        terrainVerts.push([]);
-        for(let j = 0; j < tilesPerChunk + 1; j++){
-            terrainVerts[i][j] = {x: i * chunkSize / (tilesPerChunk), y: Math.random(), z: j * chunkSize / (tilesPerChunk)}
-        }
+    const tilesPerChunkSide = 16;
+    const vertsPerChunkSide = tilesPerChunkSide + 1;
+
+    const terrainHeightMultiplier = 10.0;
+    //const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
+
+    const terrainGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize, tilesPerChunkSide, tilesPerChunkSide);
+    const terrainVertices = terrainGeometry.attributes.position.array;
+
+
+    const canvas  = document.createElement( 'canvas' );
+    canvas.width  = tilesPerChunkSide;
+    canvas.height = tilesPerChunkSide;
+    const context = canvas.getContext( '2d' );
+    context.fillStyle = '#000';
+    context.fillRect( 0, 0, tilesPerChunkSide, tilesPerChunkSide );
+    const image = context.getImageData( 0, 0, canvas.width, canvas.height );
+
+    for ( let i = 0, j = 0; j < terrainVertices.length; i ++, j += 3) {
+
+        // i is vert number
+
+        let localXIndex = i % vertsPerChunkSide, localZIndex = Math.floor(i / vertsPerChunkSide);
+        let localZ = (vertsPerChunkSide - localZIndex) / tilesPerChunkSide; // Z verts are read from right to left, not left to right
+        let localX = localXIndex / tilesPerChunkSide;
+
+        console.log(terrainVertices[j], terrainVertices[j + 1], terrainVertices[j + 2]);
+
+    
+        terrainVertices[ j + 2 ] = perlin.noise(x + localX,  z + localZ, 0.0) * terrainHeightMultiplier;
+
     }
-    const triVertices = [];
-    for(let i = 0; i < tilesPerChunk; i++){
-        for(let j = 0; j < tilesPerChunk; j++){
-            const topLeftVert     = terrainVerts[i][j];
-            const topRightVert    = terrainVerts[i][j + 1];
-            const bottomLeftVert  = terrainVerts[i + 1][j];
-            const bottomRightVert = terrainVerts[i + 1][j + 1];
 
-            // push two triangles for each tile
-            // both triangles go counterclockwise
-            triVertices.push(
-                // first tri
-                bottomLeftVert.x,  bottomLeftVert.y,  bottomLeftVert.z,
-                bottomRightVert.x, bottomRightVert.y, bottomRightVert.z,
-                topRightVert.x,    topRightVert.y,    topRightVert.z,
-
-                // second tri
-                topLeftVert.x,     topLeftVert.y,     topLeftVert.z,
-                bottomLeftVert.x,  bottomLeftVert.y,  bottomLeftVert.z,
-                topRightVert.x,    topRightVert.y,    topRightVert.z
-            )
-
+    // generate texture from terrain verticies
+    /*for(let i = 0; i < tilesPerChunkSide; i++){
+        for(let j = 0; j < tilesPerChunkSide; j++){
+            
+            image.data[4 * (j * tilesPerChunkSide + i)    ]  = Math.floor(20 + 70 * normalizedHeight);  // R
+            image.data[4 * (j * tilesPerChunkSide + i) + 1]  = Math.floor(40 + 200 * normalizedHeight); // G
+            image.data[4 * (j * tilesPerChunkSide + i) + 2]  = Math.floor(200 + 55 * normalizedHeight); // B
+            
         }
-    }
+    }*/
+
+    context.putImageData( image, 0, 0 );
+    const terrainTexture = new THREE.CanvasTexture(canvas);
+    terrainTexture.wrapS = THREE.ClampToEdgeWrapping;
+    terrainTexture.wrapT = THREE.ClampToEdgeWrapping;
 
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
-    // create floor tile
-    //const tileMesh = new THREE.Mesh( tileGeometry, tileMaterial );
-    const randHeightGeometry = new THREE.BufferGeometry();
-    randHeightGeometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array(triVertices), 3 ) );
+    const terrainMaterial = new THREE.MeshStandardMaterial({
+        map: terrainTexture,
+        side: THREE.DoubleSide,
+        wireframe: false,
+    });
 
-    const tileMesh = new THREE.Mesh( randHeightGeometry, tileMaterial );
-    tileMesh.position.x = x * chunkSize;
-    tileMesh.position.z = z * chunkSize;
-    //tileMesh.rotateX(Math.PI * 0.5);
-    chunkMesh.add(tileMesh);
+    const terrainMesh = new THREE.Mesh( terrainGeometry, terrainMaterial );
+    terrainMesh.position.x = x * chunkSize;
+    terrainMesh.position.z = z * chunkSize;
+    terrainMesh.rotateX(Math.PI * 0.5);
+    chunkMesh.add(terrainMesh);
 
     // create ceiling
-    const ceilingMesh = new THREE.Mesh(ceilingGeometry, ceilingMaterial );
-    ceilingMesh.position.x = x * chunkSize;
-    ceilingMesh.position.z = z * chunkSize;
-    ceilingMesh.position.y = ceilingHeight;
-    ceilingMesh.rotateX(Math.PI * 1.5);
-    chunkMesh.add(ceilingMesh);
+    if(false){
+        const ceilingMesh = new THREE.Mesh(ceilingGeometry, ceilingMaterial );
+        ceilingMesh.position.x = x * chunkSize;
+        ceilingMesh.position.z = z * chunkSize;
+        ceilingMesh.position.y = ceilingHeight;
+        ceilingMesh.rotateX(Math.PI * 1.5);
+        chunkMesh.add(ceilingMesh);
+    }
 
 
     // create i-beam
-    if( true ){ // ?
+    if( false ){ // ?
         const ibeamInstance = ibeamObj.clone();
         ibeamInstance.position.x = x * chunkSize;
         ibeamInstance.position.z = z * chunkSize;
@@ -264,14 +287,16 @@ function createChunkMesh(x, z){
     }
     // place, stack, & rotate boxes
         // each chunk has between 0 and 20 boxes, but anything over like 7 should be quite rare
-    let box1 = box1Mesh.clone();
-    
-    box1.position.x = (x + 0.3) * chunkSize;
-    box1.position.z = (z + 0.55) * chunkSize;
-    const boxScale = 1.0;
-    box1.scale.set(boxScale,boxScale,boxScale);
+    if( false ){ // ?
+        let box1 = box1Mesh.clone();
+        
+        box1.position.x = (x + 0.3) * chunkSize;
+        box1.position.z = (z + 0.55) * chunkSize;
+        const boxScale = 1.0;
+        box1.scale.set(boxScale,boxScale,boxScale);
 
-    chunkMesh.add(box1);
+        chunkMesh.add(box1);
+    }
     
     return chunkMesh;
 }
