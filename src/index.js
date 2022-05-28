@@ -125,6 +125,15 @@ function loadInitalChunks(){
  */
 function updateLoadedChunks(){
 
+    // unload old chunks based on position
+    getHorizonChunkCoordinates(
+        gameState.prevChunkCoordinate.x, 
+        gameState.prevChunkCoordinate.z,
+        gameState.chunkCoordinate.x, 
+        gameState.chunkCoordinate.z
+    )
+    .map(({x,z}) => chunkGroup.remove(chunkGroup.getObjectByName(chunkName(x,z))));
+
     // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
     getHorizonChunkCoordinates(
         gameState.chunkCoordinate.x, 
@@ -134,14 +143,7 @@ function updateLoadedChunks(){
     )
     .map(({x,z}) => chunkGroup.add(createChunkMesh(x,z)));
 
-    // unload old chunks based on position
-    getHorizonChunkCoordinates(
-        gameState.prevChunkCoordinate.x, 
-        gameState.prevChunkCoordinate.z,
-        gameState.chunkCoordinate.x, 
-        gameState.chunkCoordinate.z
-    )
-    .map(({x,z}) => chunkGroup.remove(chunkGroup.getObjectByName(chunkName(x,z))));
+
 
         // unload old chunks based off new integer position & old integer position
         // use .getObjectByName
@@ -203,16 +205,19 @@ function createChunkMesh(x, z){
     chunkMesh.name = chunkName(x,z);
     const ceilingHeight = 7.0;
 
-    const tilesPerChunkSide = 16;
+    const tilesPerChunkSide = 16; // 16 final
+    const inverseTilesPerChunkSide = 1.0 / tilesPerChunkSide;
     const vertsPerChunkSide = tilesPerChunkSide + 1;
+    const inverseVertsPerChunkSide = 1.0 / vertsPerChunkSide;
 
     const terrainHeightMultiplier = 10.0;
-    //const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
+    const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
 
     const terrainGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize, tilesPerChunkSide, tilesPerChunkSide);
     const terrainVertices = terrainGeometry.attributes.position.array;
 
 
+    
     const canvas  = document.createElement( 'canvas' );
     canvas.width  = tilesPerChunkSide;
     canvas.height = tilesPerChunkSide;
@@ -220,21 +225,77 @@ function createChunkMesh(x, z){
     context.fillStyle = '#000';
     context.fillRect( 0, 0, tilesPerChunkSide, tilesPerChunkSide );
     const image = context.getImageData( 0, 0, canvas.width, canvas.height );
-
-    for ( let i = 0, j = 0; j < terrainVertices.length; i ++, j += 3) {
-
-        // i is vert number
-
-        let localXIndex = i % vertsPerChunkSide, localZIndex = Math.floor(i / vertsPerChunkSide);
-        let localZ = (vertsPerChunkSide - localZIndex) / tilesPerChunkSide; // Z verts are read from right to left, not left to right
-        let localX = localXIndex / tilesPerChunkSide;
-
-        console.log(terrainVertices[j], terrainVertices[j + 1], terrainVertices[j + 2]);
-
     
-        terrainVertices[ j + 2 ] = perlin.noise(x + localX,  z + localZ, 0.0) * terrainHeightMultiplier;
+    
+    //console.log(16, terrainVertices.length, image.data.length / 4)
+    for ( let i = 0, j = 0, k = 0; j < terrainVertices.length; i ++, j += 3) {
 
+        /*
+         * j is starting index of ith vert in terrainVertices array. 
+         * terrainVertices[ j ] = x, terrainVertices[ j + 1 ] = y, terrainVertices[ j + 2 ] = z
+         * for the case tilesPerChunkSide = 2, there are 9 verts 
+         * they are traversed like so:
+         * 
+         * ------Z AXIS-----(0,0)
+         *                    |
+         *  2 ---- 1 ---- 0   |
+         *  |      |      |   X
+         *  |      |      |    
+         *  5 ---- 4 ---- 3   A
+         *  |      |      |   X
+         *  |      |      |   I
+         *  8 ---- 7 ---- 6   S
+         *                    |
+         * 
+         * however, i effectively traverses 2,1,0,5,4,3,8,7,6 i.e. with reversed rows
+         * 
+         */
+
+        const localXIndex = i % vertsPerChunkSide;
+        const localZIndex = Math.floor(i * inverseVertsPerChunkSide);
+        const localX = localXIndex * inverseTilesPerChunkSide;
+        const localZ = (vertsPerChunkSide - localZIndex) * inverseTilesPerChunkSide; // Z verts are read from right to left, not left to right
+    
+        terrainVertices[ j + 2 ] = MathUtils.clamp(perlin.noise(x + localX,  z + localZ, 0.0), -1, 0) * terrainHeightMultiplier;
     }
+    for ( let i = 0, j = 0, k = 0; j < terrainVertices.length; i ++, j += 3) {
+
+        const localXIndex = i % vertsPerChunkSide;
+        const localZIndex = Math.floor(i * inverseVertsPerChunkSide);
+
+        if( localXIndex !== tilesPerChunkSide && localZIndex !== tilesPerChunkSide){
+            // new tile in mesh
+            const terrainVertIndexFromXZ = (x,z) => z * vertsPerChunkSide + x;
+            
+            // get average height of 4 verts associated with the current tile
+            const average = (
+                terrainVertices[ 3 * terrainVertIndexFromXZ(localXIndex,     localZIndex    ) + 2 ] + 
+                terrainVertices[ 3 * terrainVertIndexFromXZ(localXIndex + 1, localZIndex    ) + 2 ] + 
+                terrainVertices[ 3 * terrainVertIndexFromXZ(localXIndex,     localZIndex + 1) + 2 ] + 
+                terrainVertices[ 3 * terrainVertIndexFromXZ(localXIndex + 1, localZIndex + 1) + 2 ]
+            ) * 0.25;
+
+            const normalizedHeight = MathUtils.clamp(average * -0.2 ,0,1); // this is a hack idk why it gives close to a normalized value lmao
+
+            //console.log(normalizedHeight);
+
+            if(normalizedHeight < 0.01){
+                image.data[k]     = 20; // R
+                image.data[k + 1] = 50; // G
+                image.data[k + 2] = 200; // B
+            }
+            else{
+                image.data[k]     = Math.floor(       normalizedHeight * 100 ); // R
+                image.data[k + 1] = Math.floor( 100 + normalizedHeight * 155 ); // G
+                image.data[k + 2] = Math.floor( 20 +  normalizedHeight * 190 ); // B
+            }
+
+            // image.data[k + 4] // ignorning alpha
+
+            k += 4;
+        }
+    }
+    console.log('========')
 
     // generate texture from terrain verticies
     /*for(let i = 0; i < tilesPerChunkSide; i++){
@@ -247,10 +308,14 @@ function createChunkMesh(x, z){
         }
     }*/
 
+    
     context.putImageData( image, 0, 0 );
     const terrainTexture = new THREE.CanvasTexture(canvas);
     terrainTexture.wrapS = THREE.ClampToEdgeWrapping;
     terrainTexture.wrapT = THREE.ClampToEdgeWrapping;
+    terrainTexture.minFilter = THREE.NearestFilter;
+    terrainTexture.magFilter = THREE.NearestFilter;
+    
 
     // changes to the world (exploded boxes for example) will be stored in a hash table
 
@@ -407,7 +472,7 @@ function init(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     scene = new THREE.Scene();
     scene.background = new THREE.Color(fogColor);
-    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.25, chunkSize * loadedChunksRadius );
+    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.5, chunkSize * loadedChunksRadius );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
