@@ -599,7 +599,7 @@ function tick(){
 
     applyStateToCharModel(elapsedTime);
 
-    //renderHelpers();
+    renderHelpers();
 
     renderWake1();
 
@@ -705,6 +705,7 @@ function updateGameState(dt){
 
     // apply min and max heading angles to velocity
     // TODO: put in a warning zone? Do something other than clamping the angle (i.e. make the plane crash or fall out of the sky, make it impossible to control)?
+    /*
     let horizonAngle = nextVelocity.angleTo(new THREE.Vector3(0,1,0));
     let velocityNormalFromBirdsEyePOV = new THREE.Vector3().crossVectors(
         new THREE.Vector3(nextVelocity.x, 0, nextVelocity.z),
@@ -719,8 +720,11 @@ function updateGameState(dt){
             nextVelocity.setY(nextVelocity.y * (1 + ( nextXZ - prevXZ) / prevXZ ));
         }
     }
+    */
  
     gameState.velocity.copy(nextVelocity);
+
+    gameState.velocity.normalize(); // TODO: needs to be done apparently? BIG ASS BUG
 
 
     // apply velocity to position
@@ -779,18 +783,17 @@ function applyStateToCharModel(){
     airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
 
     // apply heading
-    airplaneMesh.lookAt(gameState.finalPosition.clone().addScaledVector(gameState.velocity.normalize(), -1)); 
+    airplaneMesh.lookAt(gameState.finalPosition.clone().addScaledVector(gameState.velocity.clone().normalize(), -1));
 
     // apply roll
     let rollQuaternion = new THREE.Quaternion();
-    rollQuaternion.setFromAxisAngle( gameState.velocity.normalize(), gameState.rollAngle);
+    rollQuaternion.setFromAxisAngle( gameState.velocity.clone().normalize(), gameState.rollAngle);
     airplaneMesh.applyQuaternion(rollQuaternion);
 
     // apply deflection (animation)
         // weighted average between curState & prevFrame (dt prob needs to be involved here)
 }
 function renderWake1(){
-    // TODO replace airplaneMesh.position with final position
 
     const {terrainHeightAtCharacterPosition, heightAboveTerrain} = calcDistanceToGround();
 
@@ -800,17 +803,16 @@ function renderWake1(){
 
     wake1Obj.position.copy(gameState.finalPosition);
     wake1Obj.position.setY(wakeHeight);
-    const wakeHeading = gameState.finalPosition.clone().add(gameState.velocity.normalize());
+    const wakeHeading = gameState.finalPosition.clone().add(gameState.velocity.clone().normalize());
     wakeHeading.setY(wakeHeight);
     wake1Obj.lookAt(wakeHeading);
 
 }
 function renderHelpers(){
-    // TODO replace airplaneMesh.position with final position
 
         // heading visualizer
         if(headingHelper) headingHelper.removeFromParent(); 
-        headingHelper = new THREE.ArrowHelper( gameState.velocity.normalize(), gameState.finalPosition, 1.0, 0xff0000 );
+        headingHelper = new THREE.ArrowHelper( gameState.velocity.clone().normalize(), gameState.finalPosition, 1.0, 0xff0000 );
         scene.add( headingHelper );
     
         // yaw deflection visualizer
@@ -827,10 +829,9 @@ function renderHelpers(){
         if(heightHelper) heightHelper.removeFromParent();
         heightHelper = new THREE.ArrowHelper( new THREE.Vector3(0.0,-1.0,0.0), gameState.finalPosition, calcDistanceToGround().heightAboveTerrain, 0xff7d19 );
         scene.add(heightHelper);
-
-        
-        
 }
+
+
 const wake1ObjScale = 0.3;
 function loadwake1Obj(){
     
