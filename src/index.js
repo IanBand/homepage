@@ -47,7 +47,7 @@ let numberOfMeshesLoaded = 0, initFinished = false;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // integer position is used for corse grain colission detection & to avoid fp inaccuracies
 const gameState = {
-    cameraPosition: new THREE.Vector3(0.0,0.0,0.0),
+    prevCameraPosition: new THREE.Vector3(0.0,0.0,0.0),
     chunkCoordinate:      new THREE.Vector3(0,0,0), // (X COORDINATE, UNUSED, Z COORDINATE)
     prevChunkCoordinate:  new THREE.Vector3(0,0,0),
     positionInChunk:      new THREE.Vector3(0.0,0.5,0.0),
@@ -867,14 +867,26 @@ function loadwake1Obj(){
 
 function updateCameraState(dt){
 
+    const velocityDistanceFactor = 0.05,
+          velocityFovFactor = 0.05,
+          baseFov = debugVars.fov,
+          baseCameraDistance = 2.0;
+
     // have camera follow airplane
-    camera.position.copy(gameState.finalPosition.clone().addScaledVector(gameState.velocity.clone().normalize(), -8));
+    camera.position.copy(
+        gameState.finalPosition.clone().addScaledVector(
+            gameState.velocity.clone().normalize(),
+             -1 * ( baseCameraDistance + gameState.velocity.distanceToSquared(zero) * velocityDistanceFactor)
+        )
+    );
     camera.position.setY(camera.position.y + 1.0);
     
 
     camera.lookAt(gameState.finalPosition);
-    camera.fov = debugVars.fov;
+    camera.fov = baseFov + velocityFovFactor * gameState.velocity.distanceToSquared(zero);
     camera.updateProjectionMatrix();
+
+    gameState.prevCameraPosition.copy(camera.position);
 }
 
 
