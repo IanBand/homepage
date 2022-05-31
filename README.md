@@ -38,3 +38,14 @@ My 3d engine criteria:
 
 ## Code Sources
 - https://github.com/stemkoski/stemkoski.github.com/blob/master/Three.js/js/KeyboardState.js
+
+
+game concept:
+
+gain more points/time the closer to the water you are
+lose points/time if above the cloud level
+timestamps when you reach X, Y, and Z points
+points reset if you clip into terrain or water
+points represent "crowd favor"
+
+lose = launch at random angle + partacle trail + airplane flails
