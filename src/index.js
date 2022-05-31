@@ -23,7 +23,7 @@ let renderer, scene, camera,
     headingHelper, yawDeflectionHelper, pitchDeflectionHelper, heightHelper,
     clock, previousTime;
 
-const fogColor = 0x6682e8;
+const fogColor = 0x409be6;
 const floorColor = 0xc7d0f0;
 const ceilingColor = floorColor;
 const ibeamColor = 0x2b3763;
@@ -279,6 +279,8 @@ function createChunkMesh(x, z){
         if( localXIndex !== tilesPerChunkSide && localZIndex !== tilesPerChunkSide){
             // new tile in mesh
             const terrainVertIndexFromXZ = (x,z) => z * vertsPerChunkSide + x;
+
+            const checker = (x,z) => ((x % 2 == 0) != (z % 2 == 0));
             
             // get average height of 4 verts associated with the current tile
             const average = (
@@ -292,17 +294,54 @@ function createChunkMesh(x, z){
 
             //console.log(normalizedAverageHeight);
 
-            if(normalizedAverageHeight == 0.0){
-                image.data[k]     = 20; // R
-                image.data[k + 1] = 50; // G
-                image.data[k + 2] = 200; // B
+            /*const terrainColors = [
+                // range starts at 0.0
+                {
+                    // ocean
+                    startHeight: 0.0,
+                    dark: {r: 20, g: 50, b: 200},
+                    light: {r: 25, g: 75, b: 205}
+                },
+                {
+                    // beach
+                    startHeight: 0.1,
+                    dark: {r: 240, g: 185, b: 110},
+                    light: {r: 245, g: 210, b: 115}
+                }
+
+            ];
+            */
+
+            if(normalizedAverageHeight == 0.0){ // draw water
+
+                if(checker(localXIndex, localZIndex)){ // brighter water
+                    image.data[k]     = 25;  // R
+                    image.data[k + 1] = 70;  // G
+                    image.data[k + 2] = 205; // B
+                }
+                else{ // darker water
+                    image.data[k]     = 20;  // R
+                    image.data[k + 1] = 50;  // G
+                    image.data[k + 2] = 200; // B
+                }
+
             }
-            else if(normalizedAverageHeight < 0.1){
-                image.data[k]     = 242; // R
-                image.data[k + 1] = 209; // G
-                image.data[k + 2] = 116; // B
+            else if(normalizedAverageHeight < 0.1){ // draw beach
+
+                if(checker(localXIndex, localZIndex)){ // brighter beach
+                    image.data[k]     = 245; // R
+                    image.data[k + 1] = 210; // G
+                    image.data[k + 2] = 115; // B
+                }
+                else{ // darker beach
+                    image.data[k]     = 240; // R
+                    image.data[k + 1] = 185; // G
+                    image.data[k + 2] = 110; // B
+                }
+
+
             }
-            else{
+            else{ // draw mountain
                 image.data[k]     = Math.floor(       normalizedAverageHeight * 100 ); // R
                 image.data[k + 1] = Math.floor( 100 + normalizedAverageHeight * 155 ); // G
                 image.data[k + 2] = Math.floor( 20 +  normalizedAverageHeight * 190 ); // B
@@ -560,7 +599,7 @@ function tick(){
 
     applyStateToCharModel(elapsedTime);
 
-    renderHelpers();
+    //renderHelpers();
 
     renderWake1();
 
