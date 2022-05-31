@@ -18,9 +18,9 @@ document.body.style.padding = 0;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 let renderer, scene, camera,
     postProcessing, renderPass,
-    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh,
+    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh, wake1Obj,
     airplaneUp, airplaneSide,
-    headingHelper, yawDeflectionHelper, pitchDeflectionHelper,
+    headingHelper, yawDeflectionHelper, pitchDeflectionHelper, heightHelper,
     clock, previousTime;
 
 const fogColor = 0x6682e8;
@@ -47,10 +47,10 @@ let numberOfMeshesLoaded = 0, initFinished = false;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // integer position is used for corse grain colission detection & to avoid fp inaccuracies
 const gameState = {
+    cameraPosition: new THREE.Vector3(0.0,0.0,0.0),
     chunkCoordinate:      new THREE.Vector3(0,0,0), // (X COORDINATE, UNUSED, Z COORDINATE)
     prevChunkCoordinate:  new THREE.Vector3(0,0,0),
     positionInChunk:      new THREE.Vector3(0.0,0.5,0.0),
-    heading:              new THREE.Vector3(0.0,0.0,1.0),
     velocity:             new THREE.Vector3(0.0,0.0,0.7),
     acceleration:         new THREE.Vector3(0.0,0.0,0.0),
     yawDeflection:        0.0,
@@ -60,6 +60,9 @@ const gameState = {
     rollAngle:            0.0,
     rollSpeed:            0.0,
     boosting:             false,
+    // derived state data
+    finalPosition: new THREE.Vector3(0.0,0.0,0.0),
+    heading: new THREE.Vector3(0.0,0.0,0.0),
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
@@ -73,7 +76,7 @@ const zero = new THREE.Vector3(); // dont change this
 const gui = new dat.GUI();
 
 const debugVars = {
-    fov: 15,
+    fov: 55.0,
     dragCoefficent: -0.1,
     liftFactor: 0.004,
     gravity_YCmp: -0.02,
@@ -98,7 +101,7 @@ gui.add(debugVars,"minMaxHeadingAngleRadians",0,Math.PI);
 //gui.add(debugVars,"",,);
 
 
-init();
+
 
 
 
@@ -198,26 +201,35 @@ function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
     return coordList;
 }
 
+const ceilingHeight = 7.0;
+
+const tilesPerChunkSide = 8; // 16 is cool
+const tileSize = chunkSize / tilesPerChunkSide;
+const inverseTilesPerChunkSide = 1.0 / tilesPerChunkSide;
+const vertsPerChunkSide = tilesPerChunkSide + 1;
+const inverseVertsPerChunkSide = 1.0 / vertsPerChunkSide;
+const terrainHeightMultiplier = 10.0;
+const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
+
+
+const waterLevel = 0.2;
+function terrainHeightAt(x,z){
+    return (MathUtils.clamp(perlin.noise(x,z, 0.0), -1, -waterLevel) + waterLevel) * terrainHeightMultiplier
+};
+
 function createChunkMesh(x, z){
     // https://threejs.org/docs/#examples/en/geometries/TextGeometry
     // use this for instructions and some numbers on beams and stuff. lables should be a1, a2, a3, then get cryptic like "k?", "??" "00" "NO" "GO" 
     const chunkMesh = new THREE.Group();
     chunkMesh.name = chunkName(x,z);
-    const ceilingHeight = 7.0;
 
-    const tilesPerChunkSide = 16; // 16 final
-    const inverseTilesPerChunkSide = 1.0 / tilesPerChunkSide;
-    const vertsPerChunkSide = tilesPerChunkSide + 1;
-    const inverseVertsPerChunkSide = 1.0 / vertsPerChunkSide;
 
-    const terrainHeightMultiplier = 10.0;
-    const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
+
 
     const terrainGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize, tilesPerChunkSide, tilesPerChunkSide);
+    
     const terrainVertices = terrainGeometry.attributes.position.array;
 
-
-    
     const canvas  = document.createElement( 'canvas' );
     canvas.width  = tilesPerChunkSide;
     canvas.height = tilesPerChunkSide;
@@ -256,13 +268,14 @@ function createChunkMesh(x, z){
         const localX = localXIndex * inverseTilesPerChunkSide;
         const localZ = (vertsPerChunkSide - localZIndex) * inverseTilesPerChunkSide; // Z verts are read from right to left, not left to right
     
-        terrainVertices[ j + 2 ] = MathUtils.clamp(perlin.noise(x + localX,  z + localZ, 0.0), -1, 0) * terrainHeightMultiplier;
+        terrainVertices[ j + 2 ] = terrainHeightAt(x + localX,  z + localZ);
     }
     for ( let i = 0, j = 0, k = 0; j < terrainVertices.length; i ++, j += 3) {
 
         const localXIndex = i % vertsPerChunkSide;
         const localZIndex = Math.floor(i * inverseVertsPerChunkSide);
 
+        // generate texture from terrain verticies
         if( localXIndex !== tilesPerChunkSide && localZIndex !== tilesPerChunkSide){
             // new tile in mesh
             const terrainVertIndexFromXZ = (x,z) => z * vertsPerChunkSide + x;
@@ -275,19 +288,24 @@ function createChunkMesh(x, z){
                 terrainVertices[ 3 * terrainVertIndexFromXZ(localXIndex + 1, localZIndex + 1) + 2 ]
             ) * 0.25;
 
-            const normalizedHeight = MathUtils.clamp(average * -0.2 ,0,1); // this is a hack idk why it gives close to a normalized value lmao
+            const normalizedAverageHeight = MathUtils.clamp(average * -0.2 ,0,1); // this is a hack idk why it gives close to a normalized value lmao
 
-            //console.log(normalizedHeight);
+            //console.log(normalizedAverageHeight);
 
-            if(normalizedHeight < 0.01){
+            if(normalizedAverageHeight == 0.0){
                 image.data[k]     = 20; // R
                 image.data[k + 1] = 50; // G
                 image.data[k + 2] = 200; // B
             }
+            else if(normalizedAverageHeight < 0.1){
+                image.data[k]     = 242; // R
+                image.data[k + 1] = 209; // G
+                image.data[k + 2] = 116; // B
+            }
             else{
-                image.data[k]     = Math.floor(       normalizedHeight * 100 ); // R
-                image.data[k + 1] = Math.floor( 100 + normalizedHeight * 155 ); // G
-                image.data[k + 2] = Math.floor( 20 +  normalizedHeight * 190 ); // B
+                image.data[k]     = Math.floor(       normalizedAverageHeight * 100 ); // R
+                image.data[k + 1] = Math.floor( 100 + normalizedAverageHeight * 155 ); // G
+                image.data[k + 2] = Math.floor( 20 +  normalizedAverageHeight * 190 ); // B
             }
 
             // image.data[k + 4] // ignorning alpha
@@ -295,18 +313,6 @@ function createChunkMesh(x, z){
             k += 4;
         }
     }
-    console.log('========')
-
-    // generate texture from terrain verticies
-    /*for(let i = 0; i < tilesPerChunkSide; i++){
-        for(let j = 0; j < tilesPerChunkSide; j++){
-            
-            image.data[4 * (j * tilesPerChunkSide + i)    ]  = Math.floor(20 + 70 * normalizedHeight);  // R
-            image.data[4 * (j * tilesPerChunkSide + i) + 1]  = Math.floor(40 + 200 * normalizedHeight); // G
-            image.data[4 * (j * tilesPerChunkSide + i) + 2]  = Math.floor(200 + 55 * normalizedHeight); // B
-            
-        }
-    }*/
 
     
     context.putImageData( image, 0, 0 );
@@ -494,13 +500,13 @@ function init(){
         wireframe: false,
     });
 
+    loadwake1Obj();
+
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= post processing =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     postProcessing = {};
     renderPass = new RenderPass( scene, camera );
     postProcessing.composer = new EffectComposer( renderer );
     postProcessing.composer.addPass( renderPass );
-
-
 
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= GLobal Lighting =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
@@ -554,11 +560,11 @@ function tick(){
 
     applyStateToCharModel(elapsedTime);
 
-    
-    camera.position.copy(airplaneMesh.position.clone().addScaledVector(gameState.heading, -2));
-    camera.position.setY(camera.position.y + 0.3);
+    renderHelpers();
 
-    camera.lookAt(airplaneMesh.position);
+    renderWake1();
+
+    updateCameraState(deltaTime);
 
     // render
     postProcessing.composer.render( 0.1 );
@@ -600,7 +606,7 @@ function updateGameState(dt){
     const minMaxHeadingAngleRadians = debugVars.minMaxHeadingAngleRadians;
 
     const maxYawDeflection = 0.2;
-    const maxPitchDeflection = 0.6;
+    const maxPitchDeflection = 0.315;
     const deflectionAttenuationRate = -0.7; // how fast do the deflections return to 0
     const rollAttenuationRate = 0.3;
 
@@ -616,6 +622,7 @@ function updateGameState(dt){
     gameState.pitchDeflection = MathUtils.clamp(gameState.pitchDeflection, -1 * maxPitchDeflection, maxPitchDeflection);
 
     let nextVelocity = gameState.velocity.clone();
+    const normalizedPrevVelocity = gameState.velocity.clone().normalize();
 
     // set airplane side vector
     airplaneSide = new THREE.Vector3(0,1,0);
@@ -643,15 +650,11 @@ function updateGameState(dt){
 
     // apply boost
     if(gameState.boosting){
-        nextVelocity.addScaledVector(gameState.heading, boostAcceleration * dt);
+        nextVelocity.addScaledVector(normalizedPrevVelocity, boostAcceleration * dt);
     }
     
     // apply gravity
     nextVelocity.addScaledVector(gravity, dt);
-
-
-    // set heading... TODO: make heading approach velocity or get rid of it
-    //gameState.heading = gameState.velocity.clone().normalize();
 
     // apply lift (lift is upward force from forward velocity)
     nextVelocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
@@ -708,38 +711,37 @@ function updateGameState(dt){
     if(xBoundaryCrossed){
         gameState.positionInChunk.x -= Math.sign(gameState.positionInChunk.x);
     }
+
+    // update derived values
+    gameState.finalPosition = gameState.positionInChunk.clone();
+    gameState.finalPosition.add(gameState.chunkCoordinate);
+    gameState.finalPosition.multiplyScalar(chunkSize);
+}
+
+
+function calcDistanceToGround(){
+    const terrainHeightAtCharacterPosition = -1 * terrainHeightAt(
+        gameState.chunkCoordinate.x + gameState.positionInChunk.x,  
+        gameState.chunkCoordinate.z + gameState.positionInChunk.z
+    );
+
+    const heightAboveTerrain = gameState.positionInChunk.y * chunkSize - terrainHeightAtCharacterPosition;
+
+    return {terrainHeightAtCharacterPosition, heightAboveTerrain};
 }
 
 // apply updated game state to the airplane model, i.e. set position, pitch, yaw, roll & deflection
 function applyStateToCharModel(){
 
     // set position
-    let airplanePosition = gameState.positionInChunk.clone();
-    airplanePosition.add(gameState.chunkCoordinate);
-    airplanePosition.multiplyScalar(chunkSize);
-    airplaneMesh.position.copy(airplanePosition); 
+    airplaneMesh.position.copy(gameState.finalPosition); 
 
     // reset orientation
     airplaneMesh.setRotationFromAxisAngle(new THREE.Vector3(0,1,0), 0.0);
 
     // apply heading
-    airplaneMesh.lookAt(airplaneMesh.position.clone().addScaledVector(gameState.velocity.normalize(), -1)); 
+    airplaneMesh.lookAt(gameState.finalPosition.clone().addScaledVector(gameState.velocity.normalize(), -1)); 
 
-    // heading visualizer
-    if(headingHelper) headingHelper.removeFromParent(); 
-    headingHelper = new THREE.ArrowHelper( gameState.velocity.normalize(), airplaneMesh.position, 1.0, 0xff0000 );
-    scene.add( headingHelper );
-
-    // yaw deflection visualizer
-    if(yawDeflectionHelper) yawDeflectionHelper.removeFromParent();
-    yawDeflectionHelper = new THREE.ArrowHelper( airplaneSide, airplaneMesh.position, gameState.yawDeflection, 0x00ff00 );
-    scene.add( yawDeflectionHelper );
-    
-    // pitch deflection visualizer
-    if(pitchDeflectionHelper) pitchDeflectionHelper.removeFromParent();
-    pitchDeflectionHelper = new THREE.ArrowHelper( airplaneUp, airplaneMesh.position, gameState.pitchDeflection, 0x0000ff );
-    scene.add( pitchDeflectionHelper );
-    
     // apply roll
     let rollQuaternion = new THREE.Quaternion();
     rollQuaternion.setFromAxisAngle( gameState.velocity.normalize(), gameState.rollAngle);
@@ -748,8 +750,93 @@ function applyStateToCharModel(){
     // apply deflection (animation)
         // weighted average between curState & prevFrame (dt prob needs to be involved here)
 }
+function renderWake1(){
+    // TODO replace airplaneMesh.position with final position
 
-function applyStateToCamera(){
+    const {terrainHeightAtCharacterPosition, heightAboveTerrain} = calcDistanceToGround();
+
+    const wakeHeight = 0.1;
+
+    wake1Obj.visible = (terrainHeightAtCharacterPosition == 0.0) && (heightAboveTerrain < terrainHeightMultiplier * 0.05); // water level, 5% of max height
+
+    wake1Obj.position.copy(gameState.finalPosition);
+    wake1Obj.position.setY(wakeHeight);
+    const wakeHeading = gameState.finalPosition.clone().add(gameState.velocity.normalize());
+    wakeHeading.setY(wakeHeight);
+    wake1Obj.lookAt(wakeHeading);
+
+}
+function renderHelpers(){
+    // TODO replace airplaneMesh.position with final position
+
+        // heading visualizer
+        if(headingHelper) headingHelper.removeFromParent(); 
+        headingHelper = new THREE.ArrowHelper( gameState.velocity.normalize(), gameState.finalPosition, 1.0, 0xff0000 );
+        scene.add( headingHelper );
+    
+        // yaw deflection visualizer
+        if(yawDeflectionHelper) yawDeflectionHelper.removeFromParent();
+        yawDeflectionHelper = new THREE.ArrowHelper( airplaneSide, gameState.finalPosition, gameState.yawDeflection, 0x00ff00 );
+        scene.add( yawDeflectionHelper );
+        
+        // pitch deflection visualizer
+        if(pitchDeflectionHelper) pitchDeflectionHelper.removeFromParent();
+        pitchDeflectionHelper = new THREE.ArrowHelper( airplaneUp, gameState.finalPosition, gameState.pitchDeflection, 0x0000ff );
+        scene.add( pitchDeflectionHelper );
+    
+        // height visualizer
+        if(heightHelper) heightHelper.removeFromParent();
+        heightHelper = new THREE.ArrowHelper( new THREE.Vector3(0.0,-1.0,0.0), gameState.finalPosition, calcDistanceToGround().heightAboveTerrain, 0xff7d19 );
+        scene.add(heightHelper);
+
+        
+        
+}
+const wake1ObjScale = 0.3;
+function loadwake1Obj(){
+    
+    wake1Obj = new THREE.Group();
+
+    const wakeGeometry = new THREE.PlaneGeometry(4 * wake1ObjScale, 1 * wake1ObjScale);
+    const wakeMaterial = new THREE.MeshBasicMaterial({ 
+        side: THREE.DoubleSide, 
+        color: 0xffffff, 
+        alphaMap: textureLoader.load("/textures/wake1alpha.png"),
+        transparent: true,
+    });
+
+    const distanceFromCenter = 0.4;
+    const yawAngle = Math.PI * 0.1;
+    const pitchAngle = Math.PI * 0.2;
+    
+    const wakeHalf1 = new THREE.Mesh(wakeGeometry, wakeMaterial);
+    wakeHalf1.translateX(distanceFromCenter);
+    wakeHalf1.rotateY(Math.PI * 0.5 - yawAngle);
+    wakeHalf1.rotateX(pitchAngle);
+    const wakeHalf2 = new THREE.Mesh(wakeGeometry, wakeMaterial);
+    wakeHalf2.translateX(-distanceFromCenter);
+    wakeHalf2.rotateY(Math.PI * 0.5 + yawAngle);
+    wakeHalf2.rotateX(-pitchAngle);
+    
+
+    wake1Obj.add(wakeHalf1);
+    wake1Obj.add(wakeHalf2);
+
+    scene.add(wake1Obj);
+
+}
+
+function updateCameraState(dt){
 
     // have camera follow airplane
+    camera.position.copy(gameState.finalPosition.clone().addScaledVector(gameState.velocity.clone().normalize(), -8));
+    camera.position.setY(camera.position.y + 1.0);
+    
+
+    camera.lookAt(gameState.finalPosition);
+    camera.fov = debugVars.fov;
+    camera.updateProjectionMatrix();
 }
+
+
+init();
