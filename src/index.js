@@ -60,6 +60,7 @@ const gameState = {
     rollAngle:            0.0,
     rollSpeed:            0.0,
     boosting:             false,
+    lockDeflections:      false,
     // derived state data
     finalPosition: new THREE.Vector3(0.0,0.0,0.0),
     heading: new THREE.Vector3(0.0,0.0,0.0),
@@ -78,10 +79,10 @@ const gui = new dat.GUI();
 const debugVars = {
     fov: 55.0,
     dragCoefficent: -0.1,
-    liftFactor: 0.004,
+    liftFactor: 0.005,
     gravity_YCmp: -0.02,
-    pitchDeflectionCoefficent: 0.009,
-    yawDeflectionCoefficent: 0.005,
+    pitchDeflectionCoefficent: 0.02,
+    yawDeflectionCoefficent: 0.01,
     boostAcceleration: 1.0,
     deflectionSpeed: 4.0,
     rollSpeed: 1.7,
@@ -90,10 +91,10 @@ const debugVars = {
 
 gui.add(debugVars, "fov", 10, 150);
 gui.add(debugVars,"dragCoefficent",-0.5,0.0);
-gui.add(debugVars,"liftFactor",0.0,0.01);
+gui.add(debugVars,"liftFactor",0.0,0.1);
 gui.add(debugVars,"gravity_YCmp",-0.5,0.0);
-gui.add(debugVars,"pitchDeflectionCoefficent",0.0001,0.001);
-gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.001);
+gui.add(debugVars,"pitchDeflectionCoefficent",0.0001,0.1);
+gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.05);
 gui.add(debugVars,"boostAcceleration",0.0,5.0);
 gui.add(debugVars,"deflectionSpeed",0.0,10.0);
 gui.add(debugVars,"rollSpeed",0.1,5.0);
@@ -311,6 +312,7 @@ function createChunkMesh(x, z){
 
             ];
             */
+           // const writeColor = (hexColor) => {image.data[k]  = ... }
 
             if(normalizedAverageHeight == 0.0){ // draw water
 
@@ -608,6 +610,8 @@ function tick(){
     // render
     postProcessing.composer.render( 0.1 );
 };
+
+
 function applyInputsToState(){
 
     const deflectionSpeed = debugVars.deflectionSpeed; //0.1;
@@ -616,7 +620,10 @@ function applyInputsToState(){
     gameState.yawDeflectionSpeed = 0.0;
     gameState.pitchDeflectionSpeed = 0.0; 
     gameState.rollSpeed = 0.0;
-    gameState.boosting = keyboard.pressed("space") ? true : false;
+    gameState.boosting  = keyboard.pressed("space") ? true : false;
+    
+    // x is a toggle that locks deflection attenuation
+    if(keyboard.down("X")) gameState.lockDeflections = !gameState.lockDeflections;
 
     // translate game inputs into changes onto game state
     if(keyboard.pressed("up")    || keyboard.pressed("W"))
@@ -646,13 +653,30 @@ function updateGameState(dt){
 
     const maxYawDeflection = 0.2;
     const maxPitchDeflection = 0.315;
-    const deflectionAttenuationRate = -0.7; // how fast do the deflections return to 0
+    const minDeflection = 0.01;
+    const deflectionAttenuationRate = 1.5; // percentage of max deflection
     const rollAttenuationRate = 0.3;
+
+
+    //const minSpeed = 0.2;
+    //const maxSpeed = 
 
     // apply roll and deflection speeds to their positions
     gameState.rollAngle       += gameState.rollSpeed            * dt;
     gameState.yawDeflection   += gameState.yawDeflectionSpeed   * dt;
     gameState.pitchDeflection += gameState.pitchDeflectionSpeed * dt;
+
+    // attenuate deflections if not locked
+    if(!gameState.lockDeflections){
+        gameState.yawDeflection   -= Math.sign(gameState.yawDeflection)   * maxYawDeflection   * deflectionAttenuationRate * dt;
+        gameState.pitchDeflection -= Math.sign(gameState.pitchDeflection) * maxPitchDeflection * deflectionAttenuationRate * dt;
+    }
+    if(Math.abs(gameState.yawDeflection)   < minDeflection) gameState.yawDeflection   = 0.0;
+    if(Math.abs(gameState.pitchDeflection) < minDeflection) gameState.pitchDeflection = 0.0;
+
+    // save heading
+    gameState.heading.copy(gameState.velocity.clone().normalize());
+    
 
     // clamp roll angle and deflections
     // if we want to roll angle and deflections to attenuate over time, we need to use quaternions
@@ -660,71 +684,44 @@ function updateGameState(dt){
     gameState.yawDeflection   = MathUtils.clamp(gameState.yawDeflection,   -1 * maxYawDeflection,   maxYawDeflection  );
     gameState.pitchDeflection = MathUtils.clamp(gameState.pitchDeflection, -1 * maxPitchDeflection, maxPitchDeflection);
 
-    let nextVelocity = gameState.velocity.clone();
-    const normalizedPrevVelocity = gameState.velocity.clone().normalize();
 
-    // set airplane side vector
+    // orient based on current velocity
+
+    // get airplane current side vector
     airplaneSide = new THREE.Vector3(0,1,0);
-    airplaneSide.cross(nextVelocity);
+    airplaneSide.cross(gameState.velocity);
     airplaneSide.normalize();
-    airplaneSide.applyAxisAngle(nextVelocity, gameState.rollAngle);
+    airplaneSide.applyAxisAngle(gameState.heading, gameState.rollAngle); // look at the docs... applyAxisAngle needs a normalized vector
     
-    // set airplane up vector
+    // get airplane current up vector
     airplaneUp = new THREE.Vector3(0,1,0);
-    airplaneUp.cross(nextVelocity);
+    airplaneUp.cross(gameState.velocity);
     airplaneUp.normalize();
-    airplaneUp.applyAxisAngle(nextVelocity, gameState.rollAngle + Math.PI * 0.5);
+    airplaneUp.applyAxisAngle(gameState.heading, gameState.rollAngle + Math.PI * 0.5);
 
     //apply deflections to velocity TODO: look into making these quaternion rotations
-    let magnitude = nextVelocity.distanceTo(zero);
-    nextVelocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
-    nextVelocity.addScaledVector(airplaneUp,   gameState.pitchDeflection * pitchDeflectionCoefficent);
-    nextVelocity.setLength(magnitude);
-
-    // apply acceleration
-    nextVelocity.addScaledVector(gameState.acceleration, dt); // this is unused?
+    let magnitude = gameState.velocity.distanceTo(zero);
+    gameState.velocity.addScaledVector(airplaneSide, gameState.yawDeflection   * yawDeflectionCoefficent  );
+    gameState.velocity.addScaledVector(airplaneUp,   gameState.pitchDeflection * pitchDeflectionCoefficent);
+    gameState.velocity.setLength(magnitude);
+    
 
     // apply drag
-    nextVelocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
+    gameState.velocity.addScaledVector(gameState.velocity, dragCoefficent * dt );
 
     // apply boost
     if(gameState.boosting){
-        nextVelocity.addScaledVector(normalizedPrevVelocity, boostAcceleration * dt);
+        gameState.velocity.addScaledVector(gameState.heading, boostAcceleration * dt);
     }
     
     // apply gravity
-    nextVelocity.addScaledVector(gravity, dt);
+    gameState.velocity.addScaledVector(gravity, dt);
 
     // apply lift (lift is upward force from forward velocity)
-    nextVelocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
+    gameState.velocity.addScaledVector(airplaneUp, liftFactor * gameState.velocity.distanceTo(zero) * dt);
 
-    // apply minimum speed 
-    /*if(gameState.velocity.distanceToSquared(zero) < epsilon && gameState.acceleration.distanceToSquared(zero) < epsilon){
-        gameState.velocity.set(1.0,0.0,0.0);
-    }*/
-
-    // apply min and max heading angles to velocity
-    // TODO: put in a warning zone? Do something other than clamping the angle (i.e. make the plane crash or fall out of the sky, make it impossible to control)?
-    /*
-    let horizonAngle = nextVelocity.angleTo(new THREE.Vector3(0,1,0));
-    let velocityNormalFromBirdsEyePOV = new THREE.Vector3().crossVectors(
-        new THREE.Vector3(nextVelocity.x, 0, nextVelocity.z),
-        nextVelocity, 
-    );
-    velocityNormalFromBirdsEyePOV.normalize();
-    if((horizonAngle < minMaxHeadingAngleRadians) || (horizonAngle > Math.PI - minMaxHeadingAngleRadians)){
-        console.log('heading too extreme!');
-        let nextXZ = Math.sqrt(nextVelocity.x * nextVelocity.x + nextVelocity.z * nextVelocity.z);
-        let prevXZ = Math.sqrt(gameState.velocity.x * gameState.velocity.x + gameState.velocity.z * gameState.velocity.z);
-        if(nextXZ < prevXZ){
-            nextVelocity.setY(nextVelocity.y * (1 + ( nextXZ - prevXZ) / prevXZ ));
-        }
-    }
-    */
- 
-    gameState.velocity.copy(nextVelocity);
-
-    gameState.velocity.normalize(); // TODO: needs to be done apparently? BIG ASS BUG
+    // apply min & max velocity
+    gameState.velocity.clampLength(0.5, 2.0);
 
 
     // apply velocity to position
@@ -756,7 +753,8 @@ function updateGameState(dt){
     }
 
     // update derived values
-    gameState.finalPosition = gameState.positionInChunk.clone();
+    gameState.heading.copy(gameState.velocity.clone().normalize());
+    gameState.finalPosition.copy(gameState.positionInChunk);
     gameState.finalPosition.add(gameState.chunkCoordinate);
     gameState.finalPosition.multiplyScalar(chunkSize);
 }
@@ -799,7 +797,9 @@ function renderWake1(){
 
     const wakeHeight = 0.1;
 
-    wake1Obj.visible = (terrainHeightAtCharacterPosition == 0.0) && (heightAboveTerrain < terrainHeightMultiplier * 0.05); // water level, 5% of max height
+    const percentOfMaxHeightThatWakeRendersAt = 0.1;
+
+    wake1Obj.visible = (terrainHeightAtCharacterPosition == 0.0) && (heightAboveTerrain < terrainHeightMultiplier * percentOfMaxHeightThatWakeRendersAt);
 
     wake1Obj.position.copy(gameState.finalPosition);
     wake1Obj.position.setY(wakeHeight);
@@ -868,8 +868,8 @@ function loadwake1Obj(){
 
 function updateCameraState(dt){
 
-    const velocityDistanceFactor = 0.05,
-          velocityFovFactor = 0.05,
+    const velocityDistanceFactor = -0.25, // capped by max speed
+          velocityFovFactor = 10.0,
           baseFov = debugVars.fov,
           baseCameraDistance = 2.0;
 
@@ -880,7 +880,9 @@ function updateCameraState(dt){
              -1 * ( baseCameraDistance + gameState.velocity.distanceToSquared(zero) * velocityDistanceFactor)
         )
     );
-    camera.position.setY(camera.position.y + 1.0);
+
+    const heightFromPitch = 0.0; // this will be based off of the current pitch input (pitchDeflection) and current heading horizon angle
+    camera.position.setY(gameState.finalPosition.y + heightFromPitch + 0.5);
     
 
     camera.lookAt(gameState.finalPosition);
