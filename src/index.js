@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
 //import seedrandom from 'seedrandom';
-import {ImprovedNoise} from 'three/examples/jsm/math/ImprovedNoise.js'
+import {ImprovedNoise} from 'three/examples/jsm/math/ImprovedNoise.js';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -29,6 +29,7 @@ const ceilingColor = floorColor;
 const ibeamColor = 0x2b3763;
 
 const perlin = new ImprovedNoise();
+const tilePeriod = 2;
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
@@ -215,7 +216,7 @@ const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
 
 const waterLevel = 0.2;
 function terrainHeightAt(x,z){
-    return (MathUtils.clamp(perlin.noise(x,z, 0.0), -1, -waterLevel) + waterLevel) * terrainHeightMultiplier
+    return (MathUtils.clamp(perlin.noise(x,z, 0.0, tilePeriod), -1, -waterLevel) + waterLevel) * terrainHeightMultiplier
 };
 
 function createChunkMesh(x, z){
