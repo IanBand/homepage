@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postProcessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postProcessing/RenderPass.js';
 import KeyboardState from './KeyboardState.js';
 //import seedrandom from 'seedrandom';
-import {ImprovedNoise} from 'three/examples/jsm/math/ImprovedNoise.js';
+import Noise from './Noise.js';
 
 // import { ShaderPass } from 'three/examples/jsm/postProcessing/ShaderPass.js';
 // import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'; 
@@ -28,8 +28,7 @@ const floorColor = 0xc7d0f0;
 const ceilingColor = floorColor;
 const ibeamColor = 0x2b3763;
 
-const perlin = new ImprovedNoise();
-const tilePeriod = 2;
+const perlin = new Noise();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
@@ -42,7 +41,7 @@ let ceilingGeometry, ceilingMaterial;
 const keyboard = new KeyboardState();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Keep track of loading =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-const numberOfMeshesToLoad = 3;
+const numberOfMeshesToLoad = 1;
 let numberOfMeshesLoaded = 0, initFinished = false;
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -68,7 +67,9 @@ const gameState = {
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
-const loadedChunksRadius = 5;
+const loadedChunksSqrt = 8;
+const tilePeriod = loadedChunksSqrt;
+
 const _SEED_ = 23452345;
 
 const zero = new THREE.Vector3(); // dont change this
@@ -83,7 +84,7 @@ const debugVars = {
     liftFactor: 0.005,
     gravity_YCmp: -0.02,
     pitchDeflectionCoefficent: 0.02,
-    yawDeflectionCoefficent: 0.01,
+    yawDeflectionCoefficent: 0.05,//make this .01
     boostAcceleration: 1.0,
     deflectionSpeed: 4.0,
     rollSpeed: 1.7,
@@ -95,7 +96,7 @@ gui.add(debugVars,"dragCoefficent",-0.5,0.0);
 gui.add(debugVars,"liftFactor",0.0,0.1);
 gui.add(debugVars,"gravity_YCmp",-0.5,0.0);
 gui.add(debugVars,"pitchDeflectionCoefficent",0.0001,0.1);
-gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.05);
+gui.add(debugVars,"yawDeflectionCoefficent",0.0001,0.1); 
 gui.add(debugVars,"boostAcceleration",0.0,5.0);
 gui.add(debugVars,"deflectionSpeed",0.0,10.0);
 gui.add(debugVars,"rollSpeed",0.1,5.0);
@@ -103,21 +104,20 @@ gui.add(debugVars,"minMaxHeadingAngleRadians",0,Math.PI);
 //gui.add(debugVars,"",,);
 
 
-
-
-
-
 function loadInitalChunks(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Chunks =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
 
     chunkGroup = new THREE.Group();
-    for(let i = -loadedChunksRadius; i <= loadedChunksRadius; ++i){
-        for(let j = -loadedChunksRadius; j <= loadedChunksRadius; ++j){
+    for(let i = 0; i < loadedChunksSqrt; ++i){
+        for(let j = 0; j < loadedChunksSqrt; ++j){
             chunkGroup.add(createChunkMesh(i, j, _SEED_));
         }
     }
-    chunkGroup.translateX(0.5 * chunkSize);
-    chunkGroup.translateZ(0.5 * chunkSize);
+
+    // TODO: chunkGroup should be aligned with airplane position
+    // TODO: airplaneposition should start in center and coords should never be negative
+    //chunkGroup.translateX((loadedChunksSqrt * 0.5 - 0.5) * -chunkSize);
+    //chunkGroup.translateZ((loadedChunksSqrt * 0.5 - 0.5) * -chunkSize);
     
     scene.add(chunkGroup);
 }
@@ -130,30 +130,17 @@ function loadInitalChunks(){
  */
 function updateLoadedChunks(){
 
-    // unload old chunks based on position
+    
     getHorizonChunkCoordinates(
         gameState.prevChunkCoordinate.x, 
         gameState.prevChunkCoordinate.z,
         gameState.chunkCoordinate.x, 
-        gameState.chunkCoordinate.z
-    )
-    .map(({x,z}) => chunkGroup.remove(chunkGroup.getObjectByName(chunkName(x,z))));
-
-    // create new chunks based on new integer position & old integer position (answer "what chunks are to be added to the scene?")
-    getHorizonChunkCoordinates(
-        gameState.chunkCoordinate.x, 
         gameState.chunkCoordinate.z, 
-        gameState.prevChunkCoordinate.x, 
-        gameState.prevChunkCoordinate.z
     )
-    .map(({x,z}) => chunkGroup.add(createChunkMesh(x,z)));
-
-
-
-        // unload old chunks based off new integer position & old integer position
-        // use .getObjectByName
-        // and object.parent.remove( object );
-        // https://stackoverflow.com/questions/56716008/removing-object-from-group-removes-object-from-scene
+    .map(({x,z}) => {
+        //chunkGroup.position = newPosition(x,z);
+        //chunkGroup.updateMatrixWorld(); ... I think
+    });
 }
 function chunkName(x,z){
     return `CH_${x}_${z}`;
@@ -177,22 +164,22 @@ function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
 
     // this could use a refactor
     if(newX !== oldX && newZ !== oldZ){
-        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
-            coordList.push({x: newX + dx * loadedChunksRadius, z: newZ + i});
+        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
+            coordList.push({x: newX + dx * loadedChunksSqrt, z: newZ + i});
 
-            if(i < loadedChunksRadius){
-                coordList.push({x: newX + i, z: newZ + dz * loadedChunksRadius});
+            if(i < loadedChunksSqrt){
+                coordList.push({x: newX + i, z: newZ + dz * loadedChunksSqrt});
             }
         }
     }
     else if(newX !== oldX){
-        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
-            coordList.push({x: newX + dx * loadedChunksRadius, z: newZ + i});
+        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
+            coordList.push({x: newX + dx * loadedChunksSqrt, z: newZ + i});
         }
     }
     else if(newZ !== oldZ){
-        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
-            coordList.push({x: newX + i, z: newZ + dz * loadedChunksRadius});
+        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
+            coordList.push({x: newX + i, z: newZ + dz * loadedChunksSqrt});
         }
     }
     else{
@@ -203,9 +190,7 @@ function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
     return coordList;
 }
 
-const ceilingHeight = 7.0;
-
-const tilesPerChunkSide = 8; // 16 is cool
+const tilesPerChunkSide = 64; // 16 is cool
 const tileSize = chunkSize / tilesPerChunkSide;
 const inverseTilesPerChunkSide = 1.0 / tilesPerChunkSide;
 const vertsPerChunkSide = tilesPerChunkSide + 1;
@@ -216,7 +201,13 @@ const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
 
 const waterLevel = 0.2;
 function terrainHeightAt(x,z){
-    return (MathUtils.clamp(perlin.noise(x,z, 0.0, tilePeriod), -1, -waterLevel) + waterLevel) * terrainHeightMultiplier
+    console.log(x,z)
+    return  (
+                MathUtils.clamp(
+                    perlin.periodic(x,z, tilePeriod) +  Math.sin(2 * x * z - z + 3 * x / (2 * Math.PI) * tilePeriod) * 0.27, 
+                    -1, 
+                    -waterLevel
+            ) + waterLevel) * terrainHeightMultiplier;
 };
 
 function createChunkMesh(x, z){
@@ -379,38 +370,6 @@ function createChunkMesh(x, z){
     terrainMesh.rotateX(Math.PI * 0.5);
     chunkMesh.add(terrainMesh);
 
-    // create ceiling
-    if(false){
-        const ceilingMesh = new THREE.Mesh(ceilingGeometry, ceilingMaterial );
-        ceilingMesh.position.x = x * chunkSize;
-        ceilingMesh.position.z = z * chunkSize;
-        ceilingMesh.position.y = ceilingHeight;
-        ceilingMesh.rotateX(Math.PI * 1.5);
-        chunkMesh.add(ceilingMesh);
-    }
-
-
-    // create i-beam
-    if( false ){ // ?
-        const ibeamInstance = ibeamObj.clone();
-        ibeamInstance.position.x = x * chunkSize;
-        ibeamInstance.position.z = z * chunkSize;
-        ibeamInstance.position.y += 4.2;
-        chunkMesh.add(ibeamInstance);
-    }
-    // place, stack, & rotate boxes
-        // each chunk has between 0 and 20 boxes, but anything over like 7 should be quite rare
-    if( false ){ // ?
-        let box1 = box1Mesh.clone();
-        
-        box1.position.x = (x + 0.3) * chunkSize;
-        box1.position.z = (z + 0.55) * chunkSize;
-        const boxScale = 1.0;
-        box1.scale.set(boxScale,boxScale,boxScale);
-
-        chunkMesh.add(box1);
-    }
-    
     return chunkMesh;
 }
 
@@ -433,82 +392,6 @@ function loadAirplaneModel(){
     });
 }
 
-// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= I-Beam model =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-function loadIbeamModel(){
-    gltfLoader.load("models/painted_i-beam/scene.gltf", (gltf) => {
-        let ibeamGeometry = gltf.scene.children[0].children[0].children[0].children[0].geometry;
-        const ibeamScale = 0.02;
-
-        function onLoad(tex){
-            tex.offset.set(0.0,0.0);
-            //tex.rotation = Math.PI * -0.5
-        }
-        // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-        let ibeamMaterial = new THREE.MeshStandardMaterial({
-            map: textureLoader.load("textures/seamless_metal_texture_by_hhh316.jpeg", onLoad),
-            //map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png", onLoad),
-            //normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
-            //metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
-            //metalness: 0.0, // value is multiplied by metalnessMap
-            color: ibeamColor,
-            //emissive: 0x000000,
-            depthTest: true,
-            depthWrite: true,
-            side: THREE.DoubleSide
-        });
-        
-
-        let ibeamMesh = new THREE.Mesh(ibeamGeometry, ibeamMaterial);
-        ibeamObj = new THREE.Object3D();
-        ibeamObj.add(ibeamMesh);
-        ibeamObj.scale.set(ibeamScale, ibeamScale, ibeamScale);
-        ibeamObj.rotateX( Math.PI * 0.5);
-        meshLoaded();
-    });
-}
-
-// =-=-=-=-=-=-=-=-=-=-=-=-=-=-= box models =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-function loadBoxModel(){
-    gltfLoader.load("models/cardboard_boxes/scene.gltf", (gltf) => {
-        console.log('boxes', gltf.scene.children[0].children[0].children[0].children);
-        box1Mesh = gltf.scene.children[0].children[0].children[0].children[0];
-        box1Mesh.removeFromParent();
-        box2Mesh = gltf.scene.children[0].children[0].children[0].children[1];
-        box2Mesh.removeFromParent();
-        box3Mesh = gltf.scene.children[0].children[0].children[0].children[2];
-        //box3Mesh.removeFromParent();
-        /*const ibeamScale = 0.02;
-
-        ibeamObj.scale.x = ibeamScale;
-        ibeamObj.scale.y = ibeamScale;
-        ibeamObj.scale.z = ibeamScale;
-
-        // NEED THESE TO CENTER THE AIRPLANE MESH
-        //ibeamObj.scale.set(new THREE.Vector3(1.0,1.0,1.0));
-        //ibeamObj.mesh.geometry.scale(0.5);
-        ibeamObj.rotateX( Math.PI * 0.5);
-        ibeamObj.translateX(0.0);
-        ibeamObj.translateY(4.15);
-        ibeamObj.translateZ(0.0);
-
-        // https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-        ibeamObj.material = new THREE.MeshStandardMaterial({
-            map: textureLoader.load("models/painted_i-beam/textures/T_IBeam_baseColor.png"),
-            normalMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
-            metalnessMap: textureLoader.load("models/painted_i-beam/textures/T_IBeam_normal.png"),
-            metalness: 0.75, // value is multiplied by metalnessMap
-            color: 0xeeeeee,
-        });
-
-        ibeamObj = new THREE.Group();
-        ibeamObj.add(ibeamObj);
-        meshLoaded();
-        */
-        meshLoaded();
-    });
-}
-
-
 
 function init(){
 
@@ -520,7 +403,7 @@ function init(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     scene = new THREE.Scene();
     scene.background = new THREE.Color(fogColor);
-    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksRadius * 0.5, chunkSize * loadedChunksRadius );
+    //scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksSqrt * 0.5, chunkSize * loadedChunksSqrt );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
@@ -557,9 +440,6 @@ function init(){
     directionalLight.position.set( 0, 0, 5 ).normalize();
     //scene.add(directionalLight);
     scene.add(ambientLight);
-
-    loadIbeamModel();
-    loadBoxModel();
 
     loadAirplaneModel();
     
@@ -607,6 +487,8 @@ function tick(){
     renderWake1();
 
     updateCameraState(deltaTime);
+
+    //camera.position.copy(new THREE.Vector3(0,200,0)); camera.lookAt(new THREE.Vector3(0.0,0.0,0.0));
 
     // render
     postProcessing.composer.render( 0.1 );
