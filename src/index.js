@@ -18,25 +18,17 @@ document.body.style.padding = 0;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Globals =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 let renderer, scene, camera,
     postProcessing, renderPass,
-    chunkGroup, airplaneMesh, ibeamObj, ambientLight, directionalLight, box1Mesh, box2Mesh, box3Mesh, wake1Obj,
+    chunkGroup, airplaneMesh, ambientLight, directionalLight, wake1Obj,
     airplaneUp, airplaneSide,
     headingHelper, yawDeflectionHelper, pitchDeflectionHelper, heightHelper,
     clock, previousTime;
 
 const fogColor = 0x409be6;
-const floorColor = 0xc7d0f0;
-const ceilingColor = floorColor;
-const ibeamColor = 0x2b3763;
-
 const perlin = new Noise();
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Loaders =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
-
-// Reused Loaded Assets 
-let tileGeometry, tileMaterial;
-let ceilingGeometry, ceilingMaterial;
 
 const keyboard = new KeyboardState();
 
@@ -47,11 +39,11 @@ let numberOfMeshesLoaded = 0, initFinished = false;
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game State =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // integer position is used for corse grain colission detection & to avoid fp inaccuracies
 const gameState = {
-    prevCameraPosition: new THREE.Vector3(0.0,0.0,0.0),
+    prevCameraPosition:   new THREE.Vector3(0.0,0.0,0.0),
     chunkCoordinate:      new THREE.Vector3(0,0,0), // (X COORDINATE, UNUSED, Z COORDINATE)
     prevChunkCoordinate:  new THREE.Vector3(0,0,0),
-    positionInChunk:      new THREE.Vector3(0.0,0.5,0.0),
-    velocity:             new THREE.Vector3(0.0,0.0,0.7),
+    positionInChunk:      new THREE.Vector3(0.5,0.25,0.5),
+    velocity:             new THREE.Vector3(0.7,0.0,0.0),
     acceleration:         new THREE.Vector3(0.0,0.0,0.0),
     yawDeflection:        0.0,
     pitchDeflection:      0.0,
@@ -67,7 +59,9 @@ const gameState = {
 };
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Settings & Consts =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 const chunkSize = 10.0; // keep in mind, movement speed is tied to chunk size
-const loadedChunksSqrt = 8;
+const loadedChunksRadius = 20;
+const tilesPerChunkSide = 8; // 16 is cool
+const loadedChunksSqrt = 2 * loadedChunksRadius + 1;
 const tilePeriod = loadedChunksSqrt;
 
 const _SEED_ = 23452345;
@@ -108,103 +102,101 @@ function loadInitalChunks(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Chunks =-=-=-=-=-=-=-=-=-=-=-=-=-=-= 
 
     chunkGroup = new THREE.Group();
-    for(let i = 0; i < loadedChunksSqrt; ++i){
-        for(let j = 0; j < loadedChunksSqrt; ++j){
+    for(let i = -loadedChunksRadius; i <= loadedChunksRadius; ++i){
+        for(let j = -loadedChunksRadius; j <= loadedChunksRadius; ++j){
             chunkGroup.add(createChunkMesh(i, j, _SEED_));
+            // loading message: `${i * loadedChunksSqrt + j + 1} out of ${loadedChunksSqrt * loadedChunksSqrt} chunks loaded`;
         }
     }
+    scene.add(chunkGroup);
 
     // TODO: chunkGroup should be aligned with airplane position
     // TODO: airplaneposition should start in center and coords should never be negative
     //chunkGroup.translateX((loadedChunksSqrt * 0.5 - 0.5) * -chunkSize);
     //chunkGroup.translateZ((loadedChunksSqrt * 0.5 - 0.5) * -chunkSize);
     
-    scene.add(chunkGroup);
+    
+}
+
+
+function negModulo(a, b){
+    return (a % b + (a < 0 ? b : 0)) % b;
+}
+
+function chunkName(x,z){
+    return `CH_${x}_${z}`;
 }
 /** 
- * Loads new chunks based off of the players previous chunk and the chunk they have crossed into, unloads old chunks
- * 
  * **BUG**: chunks load and unload incorrectly when the player crosses into a chunk diagonally
  * 
  * **UNTESTED**: Chunks will not load correctly if the player crosses into another chunk that is not adjacent to their previous chunk
  */
-function updateLoadedChunks(){
+function translateChunks(){
 
-    
-    getHorizonChunkCoordinates(
-        gameState.prevChunkCoordinate.x, 
-        gameState.prevChunkCoordinate.z,
-        gameState.chunkCoordinate.x, 
-        gameState.chunkCoordinate.z, 
-    )
-    .map(({x,z}) => {
-        //chunkGroup.position = newPosition(x,z);
-        //chunkGroup.updateMatrixWorld(); ... I think
-    });
-}
-function chunkName(x,z){
-    return `CH_${x}_${z}`;
-}
-/**
- * 
- * @param {Number} newX 
- * @param {Number} newZ 
- * @param {Number} oldX 
- * @param {Number} oldZ 
- * @returns {[{x,z}]} A list of chunk coordinates to load 
- * this function is dog shit
- */
-function getHorizonChunkCoordinates(newX, newZ, oldX, oldZ){
-    
-    const coordList = [];
+    const oldX = gameState.prevChunkCoordinate.x, 
+          oldZ = gameState.prevChunkCoordinate.z,
+          newX = gameState.chunkCoordinate.x, 
+          newZ = gameState.chunkCoordinate.z, 
 
     // this will probably break if someone travels more than one chunk at a time
-    let dx = Math.sign(newX - oldX);
-    let dz = Math.sign(newZ - oldZ);
+    dx = Math.sign(newX - oldX),
+    dz = Math.sign(newZ - oldZ);
+
+    if(Math.abs(dx) > 1 || Math.abs(dz) > 1) console.log("crossed more than one chunk at a time")
 
     // this could use a refactor
     if(newX !== oldX && newZ !== oldZ){
-        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
-            coordList.push({x: newX + dx * loadedChunksSqrt, z: newZ + i});
-
-            if(i < loadedChunksSqrt){
-                coordList.push({x: newX + i, z: newZ + dz * loadedChunksSqrt});
-            }
-        }
+        // this case is tough to fall into...
+        console.log("crossed chunk diagonally")
     }
     else if(newX !== oldX){
-        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
-            coordList.push({x: newX + dx * loadedChunksSqrt, z: newZ + i});
+        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
+
+            // translate this chunk...
+            const chunkMesh = chunkGroup.getObjectByName(chunkName(
+                negModulo(newX + dx * (loadedChunksRadius + 1) * -1, loadedChunksSqrt),
+                negModulo(newZ + i,                                  loadedChunksSqrt)
+            ));
+
+            // ...to this coordinate
+            chunkMesh.position.x = chunkSize * (newX + dx * loadedChunksRadius);
+            chunkMesh.position.z = chunkSize * (newZ + i);
         }
     }
     else if(newZ !== oldZ){
-        for(let i = -loadedChunksSqrt; i <= loadedChunksSqrt; i++){
-            coordList.push({x: newX + i, z: newZ + dz * loadedChunksSqrt});
+        for(let i = -loadedChunksRadius; i <= loadedChunksRadius; i++){
+
+            // translate this chunk...
+            const chunkMesh = chunkGroup.getObjectByName(chunkName(
+                negModulo(newX + i,                                  loadedChunksSqrt),
+                negModulo(newZ + dz * (loadedChunksRadius + 1) * -1, loadedChunksSqrt),
+            ));
+            //console.log(chunkMesh.name);
+
+            // ...to this coordinate
+            chunkMesh.position.x = chunkSize * (newX + i);
+            chunkMesh.position.z = chunkSize * (newZ + dz * loadedChunksRadius);
         }
+        //console.log('=-=-=-=--==--==-=-=-=-=-')
     }
     else{
         console.error('getHorizonChunkCoordinates() was called with the same coordinates');
         throw{};
     }
-    //console.log(coordList);
-    return coordList;
 }
 
-const tilesPerChunkSide = 64; // 16 is cool
-const tileSize = chunkSize / tilesPerChunkSide;
+
 const inverseTilesPerChunkSide = 1.0 / tilesPerChunkSide;
 const vertsPerChunkSide = tilesPerChunkSide + 1;
 const inverseVertsPerChunkSide = 1.0 / vertsPerChunkSide;
-const terrainHeightMultiplier = 10.0;
-const inverseTerrainHeightMultiplier = 1 / terrainHeightMultiplier;
-
-
+const terrainHeightMultiplier = 50.0;
+const terrainHorizontalScale = 0.3;
 const waterLevel = 0.2;
+
 function terrainHeightAt(x,z){
-    console.log(x,z)
     return  (
                 MathUtils.clamp(
-                    perlin.periodic(x,z, tilePeriod) +  Math.sin(2 * x * z - z + 3 * x / (2 * Math.PI) * tilePeriod) * 0.27, 
+                    perlin.periodic(x * terrainHorizontalScale ,z * terrainHorizontalScale , tilePeriod), //+  Math.sin(2 * x * z - z + 3 * x / (2 * Math.PI) * tilePeriod) * 0.27, 
                     -1, 
                     -waterLevel
             ) + waterLevel) * terrainHeightMultiplier;
@@ -212,12 +204,8 @@ function terrainHeightAt(x,z){
 
 function createChunkMesh(x, z){
     // https://threejs.org/docs/#examples/en/geometries/TextGeometry
-    // use this for instructions and some numbers on beams and stuff. lables should be a1, a2, a3, then get cryptic like "k?", "??" "00" "NO" "GO" 
     const chunkMesh = new THREE.Group();
-    chunkMesh.name = chunkName(x,z);
-
-
-
+    chunkMesh.name = chunkName( negModulo(x, tilePeriod), negModulo(z, tilePeriod) );
 
     const terrainGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize, tilesPerChunkSide, tilesPerChunkSide);
     
@@ -365,9 +353,13 @@ function createChunkMesh(x, z){
     });
 
     const terrainMesh = new THREE.Mesh( terrainGeometry, terrainMaterial );
-    terrainMesh.position.x = x * chunkSize;
-    terrainMesh.position.z = z * chunkSize;
+    //terrainMesh.position.x = x * chunkSize;
+    //terrainMesh.position.z = z * chunkSize;
+
     terrainMesh.rotateX(Math.PI * 0.5);
+
+    chunkMesh.position.x = x * chunkSize;
+    chunkMesh.position.z = z * chunkSize;
     chunkMesh.add(terrainMesh);
 
     return chunkMesh;
@@ -403,27 +395,12 @@ function init(){
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= scene =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     scene = new THREE.Scene();
     scene.background = new THREE.Color(fogColor);
-    //scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksSqrt * 0.5, chunkSize * loadedChunksSqrt );
+    scene.fog = new THREE.Fog(fogColor, chunkSize * loadedChunksSqrt * 0.15, chunkSize * loadedChunksSqrt * 0.4 );
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= camera =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.01, 4000);
 
     // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Singleton Assets =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    tileGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
-    tileMaterial = new THREE.MeshStandardMaterial({
-        color: floorColor, 
-        //map: textureLoader.load("/textures/seamless_concrete_by_agf81.jpeg"), 
-        side: THREE.DoubleSide,
-        wireframe: false,
-    });
-
-    ceilingGeometry = new THREE.PlaneGeometry(chunkSize, chunkSize);
-    ceilingMaterial = new THREE.MeshStandardMaterial({
-        color: ceilingColor, 
-        map: textureLoader.load("/textures/8575-v7.jpeg"), 
-        side: THREE.DoubleSide,
-        wireframe: false,
-    });
 
     loadwake1Obj();
 
@@ -488,7 +465,7 @@ function tick(){
 
     updateCameraState(deltaTime);
 
-    //camera.position.copy(new THREE.Vector3(0,200,0)); camera.lookAt(new THREE.Vector3(0.0,0.0,0.0));
+    //camera.position.copy(new THREE.Vector3(0,1000,0)); camera.lookAt(new THREE.Vector3(0.0,0.0,0.0));
 
     // render
     postProcessing.composer.render( 0.1 );
@@ -523,6 +500,7 @@ function applyInputsToState(){
     if(keyboard.pressed("Q"))
         gameState.rollSpeed -= rollSpeed;
 }
+
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-= Game Logic =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 function updateGameState(dt){
     const epsilon = 0.00001;
@@ -613,17 +591,22 @@ function updateGameState(dt){
     const xBoundaryCrossed = gameState.positionInChunk.x >= 1.0 || gameState.positionInChunk.x <  0.0;
     const zBoundaryCrossed = gameState.positionInChunk.z >= 1.0 || gameState.positionInChunk.z <  0.0;
 
+    // whats fucking up z?
+    //console.log(gameState.positionInChunk.x, gameState.positionInChunk.z)
+
     // check if we have crossed a chunk boundary
     if( zBoundaryCrossed || xBoundaryCrossed ){
 
         // save prev coordinates
-        gameState.prevChunkCoordinate = gameState.chunkCoordinate.clone();
+        gameState.prevChunkCoordinate.copy(gameState.chunkCoordinate);
 
         // update chunk coordinates
         gameState.chunkCoordinate.add(gameState.positionInChunk.clone().floor());
         gameState.chunkCoordinate.y = 0.0; // disregard y chunk coordinate value. this lets us simply add the chunkCoordinate and positionInChunk vectors to get the world space vector
     
-        updateLoadedChunks();
+        
+        translateChunks();
+        
     }
 
     // if needed, calc new positions within chunk
